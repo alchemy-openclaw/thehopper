@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/api.ts","./src/components.tsx","./src/main.tsx","./src/prefs-types.ts","./src/prefs.ts","./src/types.ts","./src/pages/FavoritesPage.tsx","./src/pages/SongsPage.tsx","./src/pages/SuggestionsPage.tsx","./src/pages/VenuesPage.tsx"],"version":"5.9.3"}
