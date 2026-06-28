@@ -24,6 +24,8 @@ VENUES = [
         "phone": "(321) 555-0142",
         "website": "https://example.com/coconuts",
         "price_jump_queue": 5.00,
+        "premium_slot_position": 3,
+        "premium_slot_price": 5.00,
         "vibe": "Beach bar, divey, loud, packed on weekends.",
     },
     {
@@ -39,6 +41,8 @@ VENUES = [
         "phone": "(321) 555-0177",
         "website": "https://example.com/lous",
         "price_jump_queue": 7.00,
+        "premium_slot_position": 4,
+        "premium_slot_price": 7.00,
         "vibe": "Live-music bar, intimate stage, great sound system.",
     },
     {
@@ -54,6 +58,8 @@ VENUES = [
         "phone": "(321) 555-0188",
         "website": "https://example.com/pier",
         "price_jump_queue": 5.00,
+        "premium_slot_position": 3,
+        "premium_slot_price": 5.00,
         "vibe": "Tourist spot on the pier, sunset views, casual crowd.",
     },
     {
@@ -69,6 +75,8 @@ VENUES = [
         "phone": "(321) 555-0201",
         "website": "https://example.com/megomalleys",
         "price_jump_queue": 6.00,
+        "premium_slot_position": 3,
+        "premium_slot_price": 6.00,
         "vibe": "Irish pub, decent food, big screens, friendly regulars.",
     },
     {
@@ -84,6 +92,8 @@ VENUES = [
         "phone": "(321) 555-0215",
         "website": "https://example.com/palmbaypub",
         "price_jump_queue": 4.00,
+        "premium_slot_position": 2,
+        "premium_slot_price": 4.00,
         "vibe": "Neighborhood sports bar, pool tables, decent stage.",
     },
     {
@@ -99,6 +109,8 @@ VENUES = [
         "phone": "(321) 555-0233",
         "website": "https://example.com/slowandlow",
         "price_jump_queue": 5.00,
+        "premium_slot_position": 3,
+        "premium_slot_price": 5.00,
         "vibe": "BBQ joint turns into a rowdy singalong after 8pm.",
     },
     {
@@ -114,6 +126,8 @@ VENUES = [
         "phone": "(321) 555-0244",
         "website": "https://example.com/dogz",
         "price_jump_queue": 5.00,
+        "premium_slot_position": 3,
+        "premium_slot_price": 5.00,
         "vibe": "Hot dog + beer joint, college crowd, cheap drinks.",
     },
     {
@@ -129,6 +143,8 @@ VENUES = [
         "phone": "(321) 555-0256",
         "website": "https://example.com/pigwhistle",
         "price_jump_queue": 6.00,
+        "premium_slot_position": 4,
+        "premium_slot_price": 6.00,
         "vibe": "British pub in Viera's upscale plaza, older crowd, refined stage.",
     },
     {
@@ -144,6 +160,8 @@ VENUES = [
         "phone": "(321) 555-0267",
         "website": "https://example.com/playalinda",
         "price_jump_queue": 7.00,
+        "premium_slot_position": 3,
+        "premium_slot_price": 7.00,
         "vibe": "Craft brewery in downtown Titusville, rocket-launch-viewing rooftop.",
     },
     {
@@ -159,6 +177,8 @@ VENUES = [
         "phone": "(321) 555-0278",
         "website": "https://example.com/satbeach",
         "price_jump_queue": 4.00,
+        "premium_slot_position": 2,
+        "premium_slot_price": 4.00,
         "vibe": "Beachside sports bar, patio stage, surfers & retirees mixed crowd.",
     },
     {
@@ -174,6 +194,8 @@ VENUES = [
         "phone": "(321) 555-0289",
         "website": "https://example.com/ihbrewhaus",
         "price_jump_queue": 6.00,
+        "premium_slot_position": 3,
+        "premium_slot_price": 6.00,
         "vibe": "Local nano-brewery, chill vibe, patio karaoke.",
     },
     {
@@ -189,6 +211,8 @@ VENUES = [
         "phone": "(321) 555-0290",
         "website": "https://example.com/canaveralpier",
         "price_jump_queue": 8.00,
+        "premium_slot_position": 5,
+        "premium_slot_price": 8.00,
         "vibe": "Cruise-port-adjacent bar, big tourist crowd, high-energy karaoke.",
     },
     {
@@ -204,6 +228,8 @@ VENUES = [
         "phone": "(321) 555-0301",
         "website": "https://example.com/rockledgetap",
         "price_jump_queue": 5.00,
+        "premium_slot_position": 3,
+        "premium_slot_price": 5.00,
         "vibe": "Industrial-chic taproom with a small but loyal karaoke following.",
     },
     {
@@ -219,6 +245,8 @@ VENUES = [
         "phone": "(321) 555-0312",
         "website": "https://example.com/bayside",
         "price_jump_queue": 5.00,
+        "premium_slot_position": 3,
+        "premium_slot_price": 5.00,
         "vibe": "Suburban lounge, dance floor, mostly locals.",
     },
     {
@@ -234,6 +262,8 @@ VENUES = [
         "phone": "(321) 555-0323",
         "website": "https://example.com/twistedowl",
         "price_jump_queue": 4.00,
+        "premium_slot_position": 2,
+        "premium_slot_price": 4.00,
         "vibe": "Dive bar with attitude, cheap pitchers, surprisingly good songbook.",
     },
 ]

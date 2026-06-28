@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  KJMessageResponse,
   PaymentResponse,
   Song,
   Suggestion,
@@ -74,5 +75,22 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ venue_id, singer_name, song_request }),
+    }),
+
+  sendKJMessage: (
+    venue_id: number,
+    singer_name: string,
+    message: string,
+    song_request: string,
+  ) =>
+    jsonFetch<KJMessageResponse>(`${BASE}/venues/${venue_id}/message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        venue_id,
+        singer_name,
+        message,
+        song_request,
+      }),
     }),
 };

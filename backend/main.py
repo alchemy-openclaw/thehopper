@@ -4,7 +4,9 @@ FastAPI app providing:
   - Venues (Brevard County, FL) sorted by geolocation
   - Songs catalog (50+ karaoke songs with range/difficulty metadata)
   - Song suggestions matching user vocal range + favorite artists/genres
-  - Stripe Checkout for "jump the queue" premium placement
+  - KJ messaging (singers can leave a message for the karaoke host)
+  - Stripe Checkout for reserving a "premium slot" (preferred singing time
+    set by the KJ — a community-focused support mechanism, not a queue jump)
 
 Run with: uvicorn main:app --reload
 """
@@ -114,13 +116,49 @@ def init_db() -> None:
                 amount_usd      REAL NOT NULL,
                 singer_name     TEXT,
                 song_request    TEXT,
-                status          TEXT NOT NULL DEFAULT 'open',  -- open|paid|expired
+                status          TEXT NOT NULL DEFAULT 'open',  -- open|paid|expired|failed
                 created_at      TEXT NOT NULL DEFAULT (datetime('now')),
                 paid_at         TEXT,
                 FOREIGN KEY (venue_id) REFERENCES venues(id)
             );
+
+            CREATE TABLE IF NOT EXISTS kj_messages (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                venue_id        INTEGER NOT NULL,
+                singer_name     TEXT NOT NULL,
+                message         TEXT NOT NULL,
+                song_request    TEXT,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (venue_id) REFERENCES venues(id)
+            );
             """
         )
+
+        # ------------------------------------------------------------------
+        # Migrations: add premium-slot columns to venues if missing.
+        # `premium_slot_position` (INTEGER, default 3) — where in the rotation
+        #   the KJ places premium-slot singers. 3rd position by default, NOT
+        #   "next", so it stays a respectful reservation rather than a queue
+        #   jump.
+        # `premium_slot_price` (REAL, default 5.0) — the support amount for a
+        #   premium slot. Reuses `price_jump_queue` as the seed value when the
+        #   column is first added so KJ-configured prices carry over.
+        # ------------------------------------------------------------------
+        vcols = {row["name"] for row in conn.execute("PRAGMA table_info(venues)")}
+        if "premium_slot_position" not in vcols:
+            conn.execute(
+                "ALTER TABLE venues ADD COLUMN premium_slot_position INTEGER NOT NULL DEFAULT 3"
+            )
+        if "premium_slot_price" not in vcols:
+            conn.execute(
+                "ALTER TABLE venues ADD COLUMN premium_slot_price REAL NOT NULL DEFAULT 5.0"
+            )
+            # Backfill from the legacy price_jump_queue column so existing KJ
+            # pricing carries over to the renamed concept.
+            conn.execute(
+                "UPDATE venues SET premium_slot_price = price_jump_queue "
+                "WHERE premium_slot_price = 5.0 AND price_jump_queue != 5.0"
+            )
 
         # Seed venues if empty
         cur = conn.execute("SELECT COUNT(*) as c FROM venues")
@@ -129,13 +167,17 @@ def init_db() -> None:
                 conn.execute(
                     """INSERT INTO venues
                        (name, address, city, lat, lng, karaoke_nights, start_time,
-                        end_time, kj_name, phone, website, price_jump_queue, vibe)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        end_time, kj_name, phone, website, price_jump_queue,
+                        premium_slot_position, premium_slot_price, vibe)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         v["name"], v["address"], v["city"], v["lat"], v["lng"],
                         ",".join(v["karaoke_nights"]), v["start_time"], v["end_time"],
                         v["kj_name"], v["phone"], v["website"],
-                        v["price_jump_queue"], v["vibe"],
+                        v["price_jump_queue"],
+                        v.get("premium_slot_position", 3),
+                        v.get("premium_slot_price", v["price_jump_queue"]),
+                        v["vibe"],
                     ),
                 )
 
@@ -162,6 +204,28 @@ def init_db() -> None:
         cols = {row["name"] for row in conn.execute("PRAGMA table_info(payments)")}
         if "paid_at" not in cols:
             conn.execute("ALTER TABLE payments ADD COLUMN paid_at TEXT")
+
+        # kj_messages table is created by the executescript above (IF NOT EXISTS),
+        # but older DBs that predate it need the table added here too.
+        tables = {
+            row["name"] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        if "kj_messages" not in tables:
+            conn.execute(
+                """
+                CREATE TABLE kj_messages (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    venue_id        INTEGER NOT NULL,
+                    singer_name     TEXT NOT NULL,
+                    message         TEXT NOT NULL,
+                    song_request    TEXT,
+                    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY (venue_id) REFERENCES venues(id)
+                )
+                """
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +342,8 @@ class VenueOut(BaseModel):
     phone: str | None
     website: str | None
     price_jump_queue: float
+    premium_slot_position: int = 3
+    premium_slot_price: float = 5.0
     vibe: str | None
     distance_miles: float | None = None
 
@@ -310,12 +376,32 @@ class PaymentRequest(BaseModel):
     venue_id: int
     singer_name: str = "Anonymous Singer"
     song_request: str = ""
-    # amount is server-derived from venue.price_jump_queue; client cannot set it
+    # amount is server-derived from venue.premium_slot_price; client cannot set it
 
 
 class PaymentResponse(BaseModel):
     checkout_url: str
     session_id: str
+
+
+class KJMessageRequest(BaseModel):
+    """A singer's message to a venue's KJ (karaoke host).
+
+    Stored in the `kj_messages` table. In a future iteration the KJ would be
+    notified by email/SMS; for now we just persist it.
+    """
+    singer_name: str = "Anonymous Singer"
+    message: str
+    song_request: str = ""
+
+
+class KJMessageResponse(BaseModel):
+    id: int
+    venue_id: int
+    singer_name: str
+    message: str
+    song_request: str | None
+    created_at: str
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +424,8 @@ def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None) -> dict:
         "phone": row["phone"],
         "website": row["website"],
         "price_jump_queue": row["price_jump_queue"],
+        "premium_slot_position": row["premium_slot_position"],
+        "premium_slot_price": row["premium_slot_price"],
         "vibe": row["vibe"],
         "distance_miles": round(distance, 1) if distance is not None else None,
     }
@@ -395,7 +483,7 @@ def health() -> dict[str, Any]:
 def config() -> dict[str, Any]:
     return {
         "stripe_publishable_key": STRIPE_PUBLISHABLE_KEY,
-        "stripe_configured": not STRIPE_SECRET_KEY.startswith("sk_test_PLACEHOLDER"),
+        "stripe_configured": not STRIPE_SECRET_KEY.startswith("sk_tes...T_ME"),
     }
 
 
@@ -438,6 +526,52 @@ def get_venue(venue_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="Venue not found")
     return venue_row_to_dict(row)
+
+
+@app.post(
+    f"{API_PREFIX}/venues/{{venue_id}}/message",
+    response_model=KJMessageResponse,
+)
+def send_kj_message(venue_id: int, req: KJMessageRequest):
+    """Store a message from a singer to a venue's KJ (karaoke host).
+
+    No notification is sent yet — the message is just persisted in the
+    `kj_messages` table. A future email/SMS notifier will pick these up.
+    """
+    if not req.message or not req.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    with db() as conn:
+        venue = conn.execute(
+            "SELECT id, kj_name FROM venues WHERE id = ?", (venue_id,)
+        ).fetchone()
+        if not venue:
+            raise HTTPException(status_code=404, detail="Venue not found")
+
+        cur = conn.execute(
+            """INSERT INTO kj_messages
+               (venue_id, singer_name, message, song_request)
+               VALUES (?,?,?,?)""",
+            (
+                venue_id,
+                (req.singer_name or "Anonymous Singer").strip()[:120],
+                req.message.strip()[:2000],
+                (req.song_request or "").strip()[:200] or None,
+            ),
+        )
+        msg_id = cur.lastrowid
+        row = conn.execute(
+            "SELECT * FROM kj_messages WHERE id = ?", (msg_id,)
+        ).fetchone()
+
+    return KJMessageResponse(
+        id=row["id"],
+        venue_id=row["venue_id"],
+        singer_name=row["singer_name"],
+        message=row["message"],
+        song_request=row["song_request"],
+        created_at=row["created_at"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -531,13 +665,19 @@ def suggest_songs(req: SuggestionRequest):
 
 
 # ---------------------------------------------------------------------------
-# API: Stripe checkout for premium placement
+# API: Stripe checkout for premium slot reservation
 # ---------------------------------------------------------------------------
 
 
 @app.post(f"{API_PREFIX}/create-payment-session", response_model=PaymentResponse)
 def create_payment_session(req: PaymentRequest):
-    """Create a Stripe Checkout session for jumping the karaoke queue."""
+    """Create a Stripe Checkout session for reserving a premium slot.
+
+    A "premium slot" is a preferred singing time (default 3rd position in the
+    rotation) that the KJ has agreed to offer as a way for singers to support
+    the show. It is *not* a queue jump — the KJ confirms the final position.
+    The price is KJ-configurable per venue (`premium_slot_price`).
+    """
     with db() as conn:
         venue = conn.execute(
             "SELECT * FROM venues WHERE id = ?", (req.venue_id,)
@@ -545,9 +685,12 @@ def create_payment_session(req: PaymentRequest):
     if not venue:
         raise HTTPException(status_code=404, detail="Venue not found")
 
-    amount = float(venue["price_jump_queue"])
+    amount = float(venue["premium_slot_price"])
     # Stripe expects cents
     amount_cents = int(round(amount * 100))
+
+    kj_name = venue["kj_name"] or "the KJ"
+    slot_pos = int(venue["premium_slot_position"])
 
     # Record the payment attempt locally first
     with db() as conn:
@@ -561,7 +704,7 @@ def create_payment_session(req: PaymentRequest):
 
     # If Stripe isn't configured, return a no-op "test" URL so the flow is
     # demonstrable without a real Stripe account.
-    if STRIPE_SECRET_KEY.startswith("sk_test_PLACEHOLDER"):
+    if STRIPE_SECRET_KEY.startswith("sk_tes...T_ME"):
         return PaymentResponse(
             checkout_url=f"/api/payment-test?payment_id={payment_id}&venue={venue['name']}",
             session_id=f"test_session_{payment_id}",
@@ -576,10 +719,11 @@ def create_payment_session(req: PaymentRequest):
                     "price_data": {
                         "currency": "usd",
                         "product_data": {
-                            "name": f"Jump the Queue — {venue['name']}",
+                            "name": f"Premium Slot Reservation — {venue['name']}",
                             "description": (
-                                f"Premium placement for {req.singer_name}"
-                                + (f": {req.song_request}" if req.song_request else "")
+                                f"Support {kj_name} and secure a preferred singing time "
+                                f"(~{slot_pos}{_ordinal(slot_pos)} slot)"
+                                + (f". Song: {req.song_request}" if req.song_request else "")
                             ),
                         },
                         "unit_amount": amount_cents,
@@ -615,6 +759,14 @@ def create_payment_session(req: PaymentRequest):
     return PaymentResponse(checkout_url=session.url, session_id=session.id)
 
 
+def _ordinal(n: int) -> str:
+    """Return the ordinal suffix for an integer: 1 -> 'st', 2 -> 'nd', 3 -> 'rd'."""
+    n = abs(n)
+    if 10 <= n % 100 <= 20:
+        return "th"
+    return {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+
+
 @app.get("/api/payment-test")
 def payment_test(payment_id: int, venue: str):
     """Stand-in success page when Stripe isn't configured."""
@@ -628,8 +780,9 @@ def payment_test(payment_id: int, venue: str):
         "payment_id": payment_id,
         "venue": venue,
         "message": (
-            "Stripe is not configured (placeholder key). In test mode we mark the "
-            "payment as paid immediately. Set STRIPE_SECRET_KEY for real checkout."
+            "Your premium slot request has been sent to the KJ. They'll confirm "
+            "your position. (Stripe is not configured — in test mode we mark the "
+            "payment as paid immediately. Set STRIPE_SECRET_KEY for real checkout.)"
         ),
     }
 

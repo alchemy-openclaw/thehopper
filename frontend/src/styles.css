@@ -309,6 +309,143 @@ textarea {
   margin-top: 12px;
 }
 
+/* Tappable venue card on the list */
+.venue-tap {
+  appearance: none;
+  border: 1px solid var(--border);
+  color: inherit;
+  font: inherit;
+  display: block;
+  transition: border-color 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+}
+
+.venue-tap:hover {
+  border-color: var(--purple);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card), 0 0 16px rgba(211, 0, 197, 0.18);
+}
+
+.venue-tap:active {
+  transform: translateY(0);
+  border-color: var(--pink);
+}
+
+.venue-tap-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-mute);
+  font-weight: 600;
+}
+
+.venue-detail {
+  margin-top: 12px;
+}
+
+/* KJ card inside venue detail */
+.kj-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.kj-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), var(--pink));
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  box-shadow: 0 0 14px rgba(211, 0, 197, 0.35);
+}
+
+.kj-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kj-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-mute);
+  font-weight: 700;
+}
+
+.kj-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.meta-pill.kj-pill {
+  color: var(--pink);
+  border-color: rgba(255, 42, 109, 0.4);
+  background: rgba(255, 42, 109, 0.08);
+}
+
+.premium-blurb {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.45;
+  padding: 10px 12px;
+  background: rgba(249, 248, 113, 0.06);
+  border: 1px solid rgba(249, 248, 113, 0.2);
+  border-radius: var(--radius-sm);
+}
+
+.venue-contact {
+  margin-top: 12px;
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-mute);
+  flex-wrap: wrap;
+}
+
+.back-btn {
+  margin-bottom: 10px;
+  width: auto;
+  align-self: flex-start;
+}
+
+.form-blurb {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+  margin-top: -4px;
+}
+
+.confirm-text {
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.reserve-info {
+  margin: 4px 0 14px;
+}
+
+.reserve-blurb {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.reserve-blurb strong {
+  color: var(--yellow);
+  font-weight: 700;
+}
+
 .venue-header {
   display: flex;
   justify-content: space-between;

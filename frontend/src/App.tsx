@@ -37,7 +37,7 @@ export default function App() {
     if (p) {
       // clean the URL
       window.history.replaceState({}, '', window.location.pathname);
-      const t = setTimeout(() => setPaymentStatus(null), 6000);
+      const t = setTimeout(() => setPaymentStatus(null), 7000);
       return () => clearTimeout(t);
     }
   }, []);
@@ -55,10 +55,12 @@ export default function App() {
       </header>
 
       {paymentStatus === 'success' && (
-        <div className="banner ok">🎉 You're up next! The KJ has been notified.</div>
+        <div className="banner ok">
+          🎤 Your premium slot request has been sent. The KJ will confirm your position.
+        </div>
       )}
       {paymentStatus === 'cancelled' && (
-        <div className="banner warn">Payment cancelled — no charge.</div>
+        <div className="banner warn">Slot reservation cancelled — no charge.</div>
       )}
 
       <nav className="tabs">
