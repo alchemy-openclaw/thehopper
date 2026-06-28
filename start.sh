@@ -110,6 +110,8 @@ cd "$FRONTEND_DIR"
 npm run dev &
 VITE_PID=$!
 
-# Wait for either to exit
-wait -n "$API_PID" "$VITE_PID" 2>/dev/null || true
+# Wait for either to exit (bash 3 compatible for macOS)
+while kill -0 "$API_PID" 2>/dev/null && kill -0 "$VITE_PID" 2>/dev/null; do
+  sleep 1
+done
 echo -e "${YELLOW}One service exited, shutting down the other…${NC}"
