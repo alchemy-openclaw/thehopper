@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { AppConfig, KJMessageResponse, Venue } from '../types';
+import { useEffect, useRef, useState } from 'react';
+import type { AppConfig, ChatMessage, KJMessageResponse, Venue } from '../types';
 import { ordinal } from '../types';
 import { api } from '../api';
 import { getGeolocation } from '../prefs';
@@ -170,6 +170,7 @@ function VenueDetail({
 }) {
   const [showMessage, setShowMessage] = useState(false);
   const [showReserve, setShowReserve] = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
   const stripeConfigured = config?.stripe_configured ?? false;
   const kjName = venue.kj_name || 'the KJ';
@@ -227,6 +228,7 @@ function VenueDetail({
             onClick={() => {
               setShowMessage(true);
               setShowReserve(false);
+              setShowChat(false);
             }}
           >
             💬 Message KJ
@@ -236,9 +238,20 @@ function VenueDetail({
             onClick={() => {
               setShowReserve(true);
               setShowMessage(false);
+              setShowChat(false);
             }}
           >
             🎤 Reserve a premium slot
+          </button>
+          <button
+            className="btn secondary"
+            onClick={() => {
+              setShowChat(true);
+              setShowMessage(false);
+              setShowReserve(false);
+            }}
+          >
+            💬 Venue chat
           </button>
         </div>
 
@@ -283,6 +296,10 @@ function VenueDetail({
           onClose={() => setShowReserve(false)}
           onError={onError}
         />
+      )}
+
+      {showChat && (
+        <VenueChat venue={venue} onClose={() => setShowChat(false)} onError={onError} />
       )}
     </div>
   );
@@ -502,6 +519,211 @@ function ReserveSlotModal({
       </div>
     </div>
   );
+}
+
+/** Per-venue chat room with WebSocket real-time updates. */
+function VenueChat({
+  venue,
+  onClose,
+  onError,
+}: {
+  venue: Venue;
+  onClose: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [nickname, setNickname] = useState(
+    () => localStorage.getItem('thehopper_nick') || '',
+  );
+  const [draft, setDraft] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  const scrollToBottom = () => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    });
+  };
+
+  // initial history load + WebSocket connection
+  useEffect(() => {
+    let cancelled = false;
+
+    // Load history via REST
+    api.getVenueChat(venue.id).then((msgs) => {
+      if (cancelled) return;
+      setMessages(msgs);
+      setLoading(false);
+      scrollToBottom();
+    }).catch(() => {
+      if (cancelled) return;
+      setLoading(false);
+    });
+
+    // Open WebSocket for live messages
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const wsUrl = `${proto}//${host}/api/venues/${venue.id}/ws`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (cancelled) return;
+      setConnected(true);
+    };
+
+    ws.onmessage = (event) => {
+      if (cancelled) return;
+      try {
+        const data = JSON.parse(event.data);
+        // Skip error messages (they have a "type" field)
+        if (data.type === 'error') return;
+        // It's a ChatMessage
+        setMessages((prev) => [...prev, data]);
+        scrollToBottom();
+      } catch {
+        // ignore malformed
+      }
+    };
+
+    ws.onerror = () => {
+      if (cancelled) return;
+      setConnected(false);
+    };
+
+    ws.onclose = () => {
+      if (cancelled) return;
+      setConnected(false);
+    };
+
+    return () => {
+      cancelled = true;
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [venue.id]);
+
+  const send = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nick = nickname.trim() || 'Anonymous';
+    const msg = draft.trim();
+    if (!msg) return;
+
+    // persist nickname
+    localStorage.setItem('thehopper_nick', nick);
+
+    // Send via WebSocket if connected, else fall back to REST
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ nickname: nick, message: msg }));
+      setDraft('');
+      // The message will come back via the WS broadcast
+    } else {
+      // Fallback: REST POST (also broadcasts to WS listeners)
+      api.postVenueChat(venue.id, nick, msg)
+        .then((resp) => {
+          setMessages((prev) => [...prev, resp]);
+          scrollToBottom();
+          setDraft('');
+        })
+        .catch((e) => {
+          onError(e instanceof Error ? e.message : 'Could not send message');
+        });
+    }
+  };
+
+  const formatTime = (iso: string) => {
+    try {
+      return new Date(iso + 'Z').toLocaleTimeString([], {
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginTop: 12, padding: 0 }}>
+      <div className="chat-header">
+        <div>
+          <div className="section-title" style={{ margin: 0 }}>
+            💬 {venue.name} chat
+            <span
+              className={`chat-status ${connected ? 'on' : 'off'}`}
+              title={connected ? 'Connected' : 'Disconnected'}
+            >
+              {connected ? '●' : '○'}
+            </span>
+          </div>
+        </div>
+        <button className="modal-close" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+      </div>
+
+      <div className="chat-messages" ref={scrollRef}>
+        {loading ? (
+          <Loading label="Loading messages…" />
+        ) : messages.length === 0 ? (
+          <div className="chat-empty">No messages yet. Say hi! 👋</div>
+        ) : (
+          messages.map((m) => (
+            <div key={m.id} className="chat-msg">
+              <span className="chat-nick" style={{ color: nickColor(m.nickname) }}>
+                {m.nickname}
+              </span>
+              <span className="chat-time">{formatTime(m.created_at)}</span>
+              <div className="chat-body">{m.message}</div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <form className="chat-input-row" onSubmit={send}>
+        <input
+          className="input chat-nick-input"
+          placeholder="nickname"
+          value={nickname}
+          onChange={(e) => setNickname(e.target.value)}
+          maxLength={60}
+          aria-label="Nickname"
+        />
+        <input
+          className="input chat-msg-input"
+          placeholder="Say something…"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          maxLength={500}
+          aria-label="Message"
+        />
+        <button
+          className="btn cyan chat-send-btn"
+          type="submit"
+          disabled={!draft.trim()}
+        >
+          Send
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/** Deterministic color from a nickname string. */
+function nickColor(name: string): string {
+  const colors = [
+    '#ff2a6d', '#05d9e8', '#f9f871', '#2ee59d',
+    '#d300c5', '#ff6b35', '#00f5d4', '#f5e9ff',
+  ];
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  return colors[h % colors.length];
 }
 
 /** Pick a deterministic emoji avatar for a KJ based on their name. */

@@ -18,6 +18,8 @@ export interface Venue {
   premium_slot_price: number;
   vibe: string | null;
   distance_miles: number | null;
+  stripe_account_id: string | null;
+  stripe_onboarding_status: string; // none | needs_onboarding | pending_verification | active
 }
 
 export interface Song {
@@ -53,12 +55,49 @@ export interface PaymentResponse {
   session_id: string;
 }
 
+// Stripe Connect types
+
+export interface ConnectOnboardResponse {
+  onboarding_url: string;
+  account_id: string;
+}
+
+export interface ConnectStatusResponse {
+  venue_id: number;
+  account_id: string | null;
+  onboarding_status: string; // none | needs_onboarding | pending_verification | active
+  charges_enabled: boolean;
+  payouts_enabled: boolean;
+  missing_info: string[];
+}
+
+export interface ConnectDashboardResponse {
+  dashboard_url: string;
+}
+
+export interface FeeBreakdown {
+  total: number;
+  platform_fee: number;
+  connected_amount: number;
+  stripe_processing: number;
+  platform_net: number;
+  fee_percentage: number;
+}
+
 export interface KJMessageResponse {
   id: number;
   venue_id: number;
   singer_name: string;
   message: string;
   song_request: string | null;
+  created_at: string;
+}
+
+export interface ChatMessage {
+  id: number;
+  venue_id: number;
+  nickname: string;
+  message: string;
   created_at: string;
 }
 

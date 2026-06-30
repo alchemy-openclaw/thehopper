@@ -1,5 +1,10 @@
 import type {
   AppConfig,
+  ChatMessage,
+  ConnectDashboardResponse,
+  ConnectOnboardResponse,
+  ConnectStatusResponse,
+  FeeBreakdown,
   KJMessageResponse,
   PaymentResponse,
   Song,
@@ -93,4 +98,38 @@ export const api = {
         song_request,
       }),
     }),
+
+  getVenueChat: (venue_id: number, since?: number) => {
+    const params = new URLSearchParams();
+    if (since != null) params.set('since', String(since));
+    const q = params.toString();
+    return jsonFetch<ChatMessage[]>(
+      `${BASE}/venues/${venue_id}/chat${q ? '?' + q : ''}`,
+    );
+  },
+
+  postVenueChat: (venue_id: number, nickname: string, message: string) =>
+    jsonFetch<ChatMessage>(`${BASE}/venues/${venue_id}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nickname, message }),
+    }),
+
+  // Stripe Connect — KJ onboarding, status, dashboard
+
+  connectOnboard: (venue_id: number, email: string) =>
+    jsonFetch<ConnectOnboardResponse>(`${BASE}/connect/onboard`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ venue_id, email }),
+    }),
+
+  connectStatus: (venue_id: number) =>
+    jsonFetch<ConnectStatusResponse>(`${BASE}/connect/status?venue_id=${venue_id}`),
+
+  connectDashboard: (venue_id: number) =>
+    jsonFetch<ConnectDashboardResponse>(`${BASE}/connect/dashboard?venue_id=${venue_id}`),
+
+  connectFeePreview: (amount: number) =>
+    jsonFetch<FeeBreakdown>(`${BASE}/connect/fee-preview?amount=${amount}`),
 };
