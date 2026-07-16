@@ -1,0 +1,92 @@
+default_platform(:ios)
+
+# ── iOS Lanes ──────────────────────────────────────────────
+
+lane :beta do
+  setup_ci if ENV["CI"]
+  
+  # Install pods if needed
+  cocoapods unless File.exist?("../ios/Podfile.lock")
+  
+  # Build and upload to TestFlight
+  build_app(
+    project: "../ios/TheHopper.xcodeproj",
+    scheme: "TheHopper",
+    export_method: "ad-hoc",
+    output_directory: "./build/ios"
+  )
+  
+  upload_to_testflight(
+    skip_waiting_for_build_processing: true
+  )
+end
+
+lane :release do
+  setup_ci if ENV["CI"]
+  
+  build_app(
+    project: "../ios/TheHopper.xcodeproj",
+    scheme: "TheHopper",
+    export_method: "app-store",
+    output_directory: "./build/ios"
+  )
+  
+  upload_to_app_store(
+    skip_screenshots: true,
+    skip_metadata: false,
+    submit_for_review: false
+  )
+end
+
+lane :screenshots do
+  capture_screenshots(scheme: "TheHopper")
+end
+
+# ── Android Lanes ──────────────────────────────────────────
+
+platform :android do
+  lane :beta do
+    setup_ci if ENV["CI"]
+    
+    # Build APK/AAB for testing
+    gradle(
+      task: "assembleRelease",
+      project_dir: "../android"
+    )
+    
+    upload_to_play_store(
+      track: "internal",
+      skip_upload_metadata: false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      aab: "../android/app/build/outputs/bundle/release/app-release.aab"
+    )
+  end
+  
+  lane :release do
+    setup_ci if ENV["CI"]
+    
+    gradle(
+      task: "bundleRelease",
+      project_dir: "../android"
+    )
+    
+    upload_to_play_store(
+      track: "production",
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      aab: "../android/app/build/outputs/bundle/release/app-release.aab"
+    )
+  end
+  
+  lane :screenshots do
+    capture_android_screenshots
+  end
+end
+
+# ── Shared ────────────────────────────────────────────────
+
+lane :refresh_dsyms do
+  download_dsyms
+  upload_symbols_to_crashlytics
+end

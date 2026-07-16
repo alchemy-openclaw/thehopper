@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "TheHopper",
+    "slug": "thehopper",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "thehopper",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "co.launchable.thehopper",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "TheHopper uses your location to find karaoke venues near you."
+      }
+    },
+    "android": {
+      "package": "co.launchable.thehopper",
+      "adaptiveIcon": {
+        "backgroundColor": "#0d0221",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-web-browser",
+      "expo-secure-store",
+      "expo-splash-screen",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Show karaoke venues near you."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ff2d95"
+        }
+      ]
+    ],
+    "experiments": {
+      "tscPaths": true
+    }
+  }
+}

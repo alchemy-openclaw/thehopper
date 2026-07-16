@@ -1,0 +1,9 @@
+Initial release! 🎤
+
+• Find karaoke nights near you
+• Get song suggestions based on your vocal range
+• Skip the queue with in-app payments
+• Save your favorite songs
+• No login required
+
+Welcome to TheHopper — your karaoke companion.

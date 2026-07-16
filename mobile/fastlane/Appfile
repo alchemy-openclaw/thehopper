@@ -1,0 +1,10 @@
+# Fastlane configuration for TheHopper
+
+# iOS
+app_identifier("co.launchable.thehopper")
+apple_id("roscoe@alchemycreativelounge.com")
+team_id("YOUR_TEAM_ID")
+itc_team_id("YOUR_ITC_TEAM_ID")
+
+# Android
+package_name("co.launchable.thehopper")

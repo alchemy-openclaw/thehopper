@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d0221"/>
+      <stop offset="100%" stop-color="#1a0533"/>
+    </linearGradient>
+    <linearGradient id="micGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#00f5d4"/>
+      <stop offset="50%" stop-color="#9d4edd"/>
+      <stop offset="100%" stop-color="#ff2d95"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+  <!-- Microphone body (rounded rectangle capsule) -->
+  <rect x="412" y="220" width="200" height="360" rx="100" fill="url(#micGrad)" filter="url(#glow)"/>
+  <!-- Microphone grille lines -->
+  <line x1="442" y1="280" x2="582" y2="280" stroke="#0d0221" stroke-width="8" opacity="0.4"/>
+  <line x1="442" y1="320" x2="582" y2="320" stroke="#0d0221" stroke-width="8" opacity="0.4"/>
+  <line x1="442" y1="360" x2="582" y2="360" stroke="#0d0221" stroke-width="8" opacity="0.4"/>
+  <line x1="442" y1="400" x2="582" y2="400" stroke="#0d0221" stroke-width="8" opacity="0.4"/>
+  <line x1="442" y1="440" x2="582" y2="440" stroke="#0d0221" stroke-width="8" opacity="0.4"/>
+  <line x1="442" y1="480" x2="582" y2="480" stroke="#0d0221" stroke-width="8" opacity="0.4"/>
+  <line x1="442" y1="520" x2="582" y2="520" stroke="#0d0221" stroke-width="8" opacity="0.4"/>
+  <!-- Stem -->
+  <rect x="492" y="580" width="40" height="120" fill="url(#micGrad)" filter="url(#glow)"/>
+  <!-- Base -->
+  <rect x="432" y="700" width="160" height="24" rx="12" fill="url(#micGrad)" filter="url(#glow)"/>
+  <!-- Sound waves -->
+  <path d="M 320 350 Q 280 400 320 500" stroke="#00f5d4" stroke-width="12" fill="none" stroke-linecap="round" opacity="0.7" filter="url(#glow)"/>
+  <path d="M 704 350 Q 744 400 704 500" stroke="#ff2d95" stroke-width="12" fill="none" stroke-linecap="round" opacity="0.7" filter="url(#glow)"/>
+  <path d="M 270 320 Q 210 420 270 580" stroke="#00f5d4" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.4" filter="url(#glow)"/>
+  <path d="M 754 320 Q 814 420 754 580" stroke="#ff2d95" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.4" filter="url(#glow)"/>
+</svg>

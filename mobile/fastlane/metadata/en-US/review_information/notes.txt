@@ -1,0 +1,1 @@
+TheHopper is a karaoke companion app. No login required. Browse venues, get song suggestions, and optionally pay KJs via Stripe test mode. App is fully functional in test mode.
