@@ -160,11 +160,36 @@ export const api = {
 
   getKJVenues: (kj_id: number) => jsonFetch<Venue[]>(`${API_BASE}/kjs/${kj_id}/venues`),
 
-  kjStripeOnboard: (kj_id: number, email: string) =>
-    jsonFetch<StripeOnboardResponse>(
-      `${API_BASE}/kjs/${kj_id}/stripe-onboard?email=${encodeURIComponent(email)}`,
-      { method: 'POST' },
-    ),
+  kjStripeOnboard: (kj_id: number, email: string, kyc?: {
+    first_name?: string;
+    last_name?: string;
+    dob_day?: number;
+    dob_month?: number;
+    dob_year?: number;
+    address_line1?: string;
+    address_city?: string;
+    address_state?: string;
+    address_postal_code?: string;
+    ssn_last_4?: string;
+  }) => {
+    let url = `${API_BASE}/kjs/${kj_id}/stripe-onboard?email=${encodeURIComponent(email)}`;
+    if (kyc) {
+      const params = new URLSearchParams();
+      if (kyc.first_name) params.set('first_name', kyc.first_name);
+      if (kyc.last_name) params.set('last_name', kyc.last_name);
+      if (kyc.dob_day) params.set('dob_day', String(kyc.dob_day));
+      if (kyc.dob_month) params.set('dob_month', String(kyc.dob_month));
+      if (kyc.dob_year) params.set('dob_year', String(kyc.dob_year));
+      if (kyc.address_line1) params.set('address_line1', kyc.address_line1);
+      if (kyc.address_city) params.set('address_city', kyc.address_city);
+      if (kyc.address_state) params.set('address_state', kyc.address_state);
+      if (kyc.address_postal_code) params.set('address_postal_code', kyc.address_postal_code);
+      if (kyc.ssn_last_4) params.set('ssn_last_4', kyc.ssn_last_4);
+      const qs = params.toString();
+      if (qs) url += `&${qs}`;
+    }
+    return jsonFetch<StripeOnboardResponse>(url, { method: 'POST' });
+  },
 
   kjStripeStatus: (kj_id: number) =>
     jsonFetch<StripeStatusResponse>(`${API_BASE}/kjs/${kj_id}/stripe-status`),

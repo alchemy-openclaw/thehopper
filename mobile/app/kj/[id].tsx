@@ -54,21 +54,82 @@ export default function KJProfileScreen() {
 
   const handleStripeOnboard = async () => {
     if (!kj) return;
+    // Parse KJ's name from the DB record for prefill
+    const nameParts = (kj.name || '').split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
     Alert.prompt(
       'Stripe Onboarding',
       'Enter your email for Stripe:',
       async (email) => {
         if (!email) return;
-        try {
-          const res = await api.kjStripeOnboard(kjId, email);
-          let url = res.onboarding_url;
-          if (url.startsWith('/')) {
-            url = `http://localhost:8000${url}`;
-          }
-          await WebBrowser.openBrowserAsync(url);
-        } catch (e) {
-          Alert.alert('Error', e instanceof Error ? e.message : 'Stripe onboarding failed');
-        }
+        Alert.prompt(
+          'Date of Birth',
+          'Enter DOB as MM/DD/YYYY (for Stripe verification):',
+          async (dobStr) => {
+            if (!dobStr) {
+              // No DOB -- proceed with email only, Stripe will ask
+              try {
+                const res = await api.kjStripeOnboard(kjId, email);
+                let url = res.onboarding_url;
+                if (url.startsWith('/')) {
+                  url = `https://thehopper.alchemycreativelounge.com${url}`;
+                }
+                await WebBrowser.openBrowserAsync(url);
+              } catch (e) {
+                Alert.alert('Error', e instanceof Error ? e.message : 'Stripe onboarding failed');
+              }
+              return;
+            }
+            const [month, day, year] = dobStr.split('/').map(Number);
+            Alert.prompt(
+              'Address',
+              'Enter your street address (city, state, ZIP will be asked next):',
+              async (address) => {
+                if (!address) return;
+                Alert.prompt(
+                  'City, State ZIP',
+                  'e.g. "Melbourne, FL 32901":',
+                  async (cityStateZip) => {
+                    const parts = cityStateZip?.split(',').map(s => s.trim()) || [];
+                    const city = parts[0] || '';
+                    const stateZip = (parts[1] || '').split(' ');
+                    const state = stateZip[0] || '';
+                    const postalCode = stateZip.slice(1).join(' ') || '';
+                    Alert.prompt(
+                      'Last 4 of SSN',
+                      'Enter last 4 digits of your SSN:',
+                      async (ssn4) => {
+                        try {
+                          const res = await api.kjStripeOnboard(kjId, email, {
+                            first_name: firstName,
+                            last_name: lastName,
+                            dob_day: day,
+                            dob_month: month,
+                            dob_year: year,
+                            address_line1: address,
+                            address_city: city,
+                            address_state: state,
+                            address_postal_code: postalCode,
+                            ssn_last_4: ssn4 || undefined,
+                          });
+                          let url = res.onboarding_url;
+                          if (url.startsWith('/')) {
+                            url = `https://thehopper.alchemycreativelounge.com${url}`;
+                          }
+                          await WebBrowser.openBrowserAsync(url);
+                        } catch (e) {
+                          Alert.alert('Error', e instanceof Error ? e.message : 'Stripe onboarding failed');
+                        }
+                      },
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
       },
     );
   };

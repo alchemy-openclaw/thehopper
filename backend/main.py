@@ -2259,8 +2259,26 @@ def get_kj_venues(kj_id: int):
 
 
 @app.post(f"{API_PREFIX}/kjs/{{kj_id}}/stripe-onboard")
-def kj_stripe_onboard(kj_id: int, email: str = Query(..., description="KJ email for Stripe")):
-    """Start Stripe Connect onboarding for a KJ."""
+def kj_stripe_onboard(
+    kj_id: int,
+    email: str = Query(..., description="KJ email for Stripe"),
+    first_name: str | None = Query(None, description="KJ first name for KYC prefill"),
+    last_name: str | None = Query(None, description="KJ last name for KYC prefill"),
+    dob_day: int | None = Query(None, description="Date of birth day"),
+    dob_month: int | None = Query(None, description="Date of birth month"),
+    dob_year: int | None = Query(None, description="Date of birth year"),
+    address_line1: str | None = Query(None, description="Street address"),
+    address_city: str | None = Query(None, description="City"),
+    address_state: str | None = Query(None, description="State"),
+    address_postal_code: str | None = Query(None, description="ZIP code"),
+    ssn_last_4: str | None = Query(None, description="Last 4 of SSN"),
+):
+    """Start Stripe Connect onboarding for a KJ.
+
+    Accepts optional KYC fields for prefilling the Stripe Express
+    onboarding form. The KJ's name and phone from the kjs table
+    are used automatically if available.
+    """
     with db() as conn:
         kj = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
     if not kj:
@@ -2282,6 +2300,35 @@ def kj_stripe_onboard(kj_id: int, email: str = Query(..., description="KJ email 
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Stripe error creating account: {e}")
+
+    # Prefill KYC from provided fields + KJ's stored name/phone
+    # Use the KJ's name from the DB if first_name/last_name not provided
+    kj_name = kj["name"] or ""
+    kj_name_parts = kj_name.split(" ", 1)
+    prefill_first = first_name or (kj_name_parts[0] if kj_name_parts else None)
+    prefill_last = last_name or (kj_name_parts[1] if len(kj_name_parts) > 1 else None)
+    kj_phone = kj["phone"]
+
+    has_kyc_prefill = any([prefill_first, prefill_last, dob_day is not None, address_line1, ssn_last_4])
+    if has_kyc_prefill:
+        try:
+            connect.create_or_update_person(
+                account_id=account.id,
+                first_name=prefill_first,
+                last_name=prefill_last,
+                dob_day=dob_day,
+                dob_month=dob_month,
+                dob_year=dob_year,
+                address_line1=address_line1,
+                address_city=address_city,
+                address_state=address_state,
+                address_postal_code=address_postal_code,
+                ssn_last_4=ssn_last_4,
+                phone=kj_phone,
+                email=email,
+            )
+        except Exception:
+            pass  # Best-effort prefill
 
     try:
         onboarding_url = connect.create_onboarding_link(account.id)
