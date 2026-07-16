@@ -30,7 +30,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Venues',
+          title: 'Find',
           tabBarLabel: 'Find',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="location" color={color} size={size} />
@@ -38,32 +38,22 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="event"
+        options={{
+          title: 'Event',
+          tabBarLabel: 'Event',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="megaphone" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="songs"
         options={{
-          title: 'Songs',
-          tabBarLabel: 'Songs',
+          title: 'My Songs',
+          tabBarLabel: 'My Songs',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="musical-notes" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="suggestions"
-        options={{
-          title: 'For You',
-          tabBarLabel: 'Suggestions',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="sparkles" color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="favorites"
-        options={{
-          title: 'Saved',
-          tabBarLabel: 'Favorites',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="star" color={color} size={size} />
           ),
         }}
       />

@@ -14,7 +14,7 @@ import {
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as SecureStore from 'expo-secure-store';
-import { api } from '../../src/api';
+import { api, API_BASE } from '../../src/api';
 import type { KJ } from '../../src/types';
 import {
   Banner,
@@ -165,7 +165,7 @@ export default function AddSpotScreen() {
       const res = await api.kjStripeOnboard(kjResult.id, email);
       let url = res.onboarding_url;
       if (url.startsWith('/')) {
-        url = `http://localhost:8000${url}`;
+        url = `${API_BASE.replace(/\/api$/, '')}${url}`;
       }
       await WebBrowser.openBrowserAsync(url);
     } catch (e) {
