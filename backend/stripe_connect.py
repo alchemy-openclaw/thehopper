@@ -126,7 +126,7 @@ class ConnectManager:
         stripe.api_key = os.environ.get(
             "STRIPE_SECRET_KEY", "sk_tes...T_ME"
         )
-        self._test_mode = stripe.api_key.startswith("sk_tes")
+        self._test_mode = stripe.api_key.startswith("sk_tes...T_ME") or "T_ME" in stripe.api_key
 
     # ------------------------------------------------------------------
     # Account creation
