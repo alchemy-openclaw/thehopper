@@ -166,6 +166,119 @@ class ConnectManager:
         )
         return self._account_from_stripe(acct)
 
+    def create_or_update_person(
+        self,
+        account_id: str,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        dob_day: int | None = None,
+        dob_month: int | None = None,
+        dob_year: int | None = None,
+        address_line1: str | None = None,
+        address_city: str | None = None,
+        address_state: str | None = None,
+        address_postal_code: str | None = None,
+        ssn_last_4: str | None = None,
+        phone: str | None = None,
+        email: str | None = None,
+        is_representative: bool = True,
+        person_id: str | None = None,
+    ) -> str:
+        """Create or update a Person on an Express account for KYC prefill.
+
+        IMPORTANT: This must be called BEFORE creating an Account Link.
+        Once an Account Link is created for an Express account, Stripe
+        locks KYC info and it can no longer be read or updated via API.
+
+        For Express accounts, the account holder still needs to visit
+        Stripe's hosted onboarding page to confirm the prefilled data,
+        add their payout method, and accept TOS. Prefill just makes
+        that page faster -- they confirm instead of typing.
+
+        Args:
+            account_id: The connected account ID.
+            first_name / last_name: Legal name.
+            dob_day / dob_month / dob_year: Date of birth.
+            address_*: Physical address.
+            ssn_last_4: Last 4 of SSN.
+            phone: Phone number.
+            email: Email (can differ from account email).
+            is_representative: True for the account representative.
+            person_id: If updating an existing Person, their ID.
+                If None, creates a new Person.
+
+        Returns:
+            The Person ID.
+        """
+        if self._test_mode:
+            return f"person_test_{account_id}"
+
+        # Build the person data dict with only provided fields
+        person_data: dict[str, Any] = {}
+        if first_name:
+            person_data["first_name"] = first_name
+        if last_name:
+            person_data["last_name"] = last_name
+        if dob_day is not None and dob_month is not None and dob_year is not None:
+            person_data["dob"] = {"day": dob_day, "month": dob_month, "year": dob_year}
+        if address_line1:
+            person_data["address"] = {
+                "line1": address_line1,
+                "city": address_city or "",
+                "state": address_state or "",
+                "postal_code": address_postal_code or "",
+                "country": "US",
+            }
+        if ssn_last_4:
+            person_data["ssn_last_4"] = ssn_last_4
+        if phone:
+            person_data["phone"] = phone
+        if email:
+            person_data["email"] = email
+        if is_representative:
+            person_data["relationship"] = {"representative": True}
+
+        if person_id:
+            person = stripe.Person.modify(
+                person_id,
+                account=account_id,
+                **person_data,
+            )
+        else:
+            person = stripe.Person.create(
+                account=account_id,
+                **person_data,
+            )
+        return person.id
+
+    def set_daily_payouts(self, account_id: str) -> bool:
+        """Configure an Express account for daily automatic payouts.
+
+        By default, Stripe Express accounts are on a 2-day rolling
+        schedule. This sets it to daily (funds paid out as soon as
+        they're available). Call this after the account is active
+        (charges_enabled and payouts_enabled).
+
+        Returns True if successful, False otherwise.
+        """
+        if self._test_mode:
+            return True
+
+        try:
+            stripe.Account.modify(
+                account_id,
+                settings={
+                    "payouts": {
+                        "schedule": {
+                            "interval": "daily",
+                        },
+                    },
+                },
+            )
+            return True
+        except Exception:
+            return False
+
     def retrieve_account(self, account_id: str) -> ConnectAccount:
         """Fetch the current status of a connected account."""
         if self._test_mode:
@@ -395,6 +508,172 @@ class ConnectManager:
             "pending": pending,
             "currency": balance.available[0].currency if balance.available else "usd",
         }
+
+    # ------------------------------------------------------------------
+    # Product / price management (KJ-configurable premium slot products)
+    # ------------------------------------------------------------------
+
+    def create_product(
+        self,
+        connected_account_id: str,
+        name: str,
+        description: str = "",
+        metadata: dict[str, str] | None = None,
+    ) -> str:
+        """Create a product on the connected account.
+
+        Products are created on the connected account (not the platform)
+        so they belong to the KJ. Prices are created separately and linked.
+
+        Returns the product ID.
+        """
+        if self._test_mode:
+            return f"prod_test_{name[:10]}"
+
+        product = stripe.Product.create(
+            name=name,
+            description=description,
+            metadata=metadata or {},
+            stripe_account=connected_account_id,
+        )
+        return product.id
+
+    def create_price(
+        self,
+        connected_account_id: str,
+        product_id: str,
+        amount_cents: int,
+        currency: str = "usd",
+        metadata: dict[str, str] | None = None,
+    ) -> str:
+        """Create a price for a product on the connected account.
+
+        Returns the price ID.
+        """
+        if self._test_mode:
+            return f"price_test_{amount_cents}"
+
+        price = stripe.Price.create(
+            product=product_id,
+            unit_amount=amount_cents,
+            currency=currency,
+            metadata=metadata or {},
+            stripe_account=connected_account_id,
+        )
+        return price.id
+
+    def list_products(
+        self, connected_account_id: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """List all products on a connected account."""
+        if self._test_mode:
+            return []
+
+        products = stripe.Product.list(
+            stripe_account=connected_account_id,
+            limit=limit,
+            active=True,
+        )
+        result = []
+        for p in products.data:
+            # Fetch prices for each product
+            prices = stripe.Price.list(
+                stripe_account=connected_account_id,
+                product=p.id,
+                active=True,
+                limit=5,
+            )
+            result.append({
+                "id": p.id,
+                "name": p.name,
+                "description": p.description or "",
+                "active": p.active,
+                "prices": [
+                    {
+                        "id": pr.id,
+                        "amount_cents": pr.unit_amount,
+                        "amount_usd": (pr.unit_amount or 0) / 100,
+                        "currency": pr.currency,
+                        "active": pr.active,
+                    }
+                    for pr in prices.data
+                ],
+                "metadata": dict(p.metadata or {}),
+            })
+        return result
+
+    def update_product(
+        self,
+        connected_account_id: str,
+        product_id: str,
+        active: bool | None = None,
+        name: str | None = None,
+        description: str | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> bool:
+        """Update a product on a connected account.
+
+        Setting active=False deactivates the product (it won't show up
+        in active listings but remains in the Stripe dashboard).
+        """
+        if self._test_mode:
+            return True
+
+        update_data: dict[str, Any] = {}
+        if active is not None:
+            update_data["active"] = active
+        if name:
+            update_data["name"] = name
+        if description is not None:
+            update_data["description"] = description
+        if metadata:
+            update_data["metadata"] = metadata
+
+        if not update_data:
+            return False
+
+        stripe.Product.modify(
+            product_id,
+            stripe_account=connected_account_id,
+            **update_data,
+        )
+        return True
+
+    def create_checkout_with_product(
+        self,
+        connected_account_id: str,
+        price_id: str,
+        platform_fee_cents: int,
+        success_url: str = "",
+        cancel_url: str = "",
+        metadata: dict[str, str] | None = None,
+    ) -> stripe.checkout.Session:
+        """Create a Checkout session using an existing product/price.
+
+        This is the product-based alternative to create_checkout_session_with_fee
+        which uses ad-hoc price_data. Using a real price ID means the
+        product shows up properly in the KJ's Stripe dashboard and
+        can be enabled/disabled without code changes.
+        """
+        if self._test_mode:
+            class _MockSession:
+                id = f"test_session_{price_id}"
+                url = f"/api/payment-test?price={price_id}"
+                payment_intent = f"test_pi_{price_id}"
+            return _MockSession()  # type: ignore
+
+        session = stripe.checkout.Session.create(
+            line_items=[{"price": price_id, "quantity": 1}],
+            mode="payment",
+            success_url=success_url or f"{RETURN_URL}?payment=success",
+            cancel_url=cancel_url or f"{RETURN_URL}?payment=cancelled",
+            payment_intent_data={
+                "application_fee_amount": platform_fee_cents,
+                "transfer_data": {"destination": connected_account_id},
+            },
+            metadata=metadata or {},
+        )
+        return session
 
     # ------------------------------------------------------------------
     # Webhook helpers

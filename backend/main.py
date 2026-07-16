@@ -271,6 +271,27 @@ def init_db() -> None:
             )
 
         # ------------------------------------------------------------------
+        # Migrations: KJ-configurable products (premium slot variants)
+        # ------------------------------------------------------------------
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS kj_products (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                venue_id        INTEGER NOT NULL,
+                stripe_product_id  TEXT,
+                stripe_price_id    TEXT,
+                name            TEXT NOT NULL,
+                description     TEXT DEFAULT '',
+                amount_cents    INTEGER NOT NULL,
+                active          INTEGER NOT NULL DEFAULT 1,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (venue_id) REFERENCES venues(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_kj_products_venue ON kj_products(venue_id, active);
+            """
+        )
+
+        # ------------------------------------------------------------------
         # Migration: add kj_id column to venues (links venue → KJ record)
         # ------------------------------------------------------------------
         vcols = {row["name"] for row in conn.execute("PRAGMA table_info(venues)")}
@@ -1205,9 +1226,28 @@ def suggest_songs(req: SuggestionRequest):
 
 
 class ConnectOnboardRequest(BaseModel):
-    """Request to start Stripe Connect onboarding for a venue's KJ."""
+    """Request to start Stripe Connect onboarding for a venue's KJ.
+
+    Email is required. All KYC fields are optional but recommended --
+    when provided, they are prefilled on the Stripe Express account
+    so the KJ's hosted onboarding page is confirm-and-click instead
+    of fill-out-form.
+    """
     venue_id: int
     email: str  # KJ's email for the Stripe account
+
+    # Optional KYC prefill fields
+    first_name: str | None = None
+    last_name: str | None = None
+    dob_day: int | None = None
+    dob_month: int | None = None
+    dob_year: int | None = None
+    address_line1: str | None = None
+    address_city: str | None = None
+    address_state: str | None = None
+    address_postal_code: str | None = None
+    ssn_last_4: str | None = None
+    phone: str | None = None
 
 
 class ConnectOnboardResponse(BaseModel):
@@ -1250,6 +1290,11 @@ def connect_onboard(req: ConnectOnboardRequest):
 
     If the venue already has a Stripe account ID, we generate a new
     onboarding link for that account instead of creating a new one.
+
+    If KYC prefill fields are provided (name, DOB, address, SSN last 4),
+    they are submitted to Stripe via the Persons API BEFORE creating the
+    onboarding link. This makes the KJ's hosted onboarding page faster
+    -- they confirm prefilled data instead of typing everything.
     """
     with db() as conn:
         venue = conn.execute(
@@ -1261,7 +1306,10 @@ def connect_onboard(req: ConnectOnboardRequest):
     existing_acct = venue["stripe_account_id"] if "stripe_account_id" in venue.keys() else None
 
     if existing_acct:
-        # Account already exists — generate a fresh onboarding link
+        # Account already exists -- generate a fresh onboarding link.
+        # Note: if KYC was already locked (link previously created),
+        # the prefill attempt will silently fail. That's fine -- the
+        # KJ just fills in whatever's missing on the hosted page.
         try:
             onboarding_url = connect.create_onboarding_link(existing_acct)
         except Exception as e:
@@ -1282,6 +1330,36 @@ def connect_onboard(req: ConnectOnboardRequest):
         raise HTTPException(
             status_code=502, detail=f"Stripe error creating account: {e}"
         )
+
+    # Prefill KYC info via Persons API BEFORE creating the Account Link.
+    # Once an Account Link is created, Stripe locks KYC for Express accounts.
+    has_kyc_prefill = any([
+        req.first_name, req.last_name,
+        req.dob_day is not None,
+        req.address_line1,
+        req.ssn_last_4,
+    ])
+    if has_kyc_prefill:
+        try:
+            connect.create_or_update_person(
+                account_id=account.id,
+                first_name=req.first_name,
+                last_name=req.last_name,
+                dob_day=req.dob_day,
+                dob_month=req.dob_month,
+                dob_year=req.dob_year,
+                address_line1=req.address_line1,
+                address_city=req.address_city,
+                address_state=req.address_state,
+                address_postal_code=req.address_postal_code,
+                ssn_last_4=req.ssn_last_4,
+                phone=req.phone,
+                email=req.email,
+            )
+        except Exception:
+            # Prefill is best-effort. If it fails, the KJ fills
+            # everything on Stripe's hosted page.
+            pass
 
     # Generate onboarding link
     try:
@@ -1388,6 +1466,219 @@ def connect_fee_preview(amount: float = Query(..., description="Amount in USD"))
     amount_cents = int(round(amount * 100))
     breakdown = connect.calculate_fee(amount_cents)
     return FeeBreakdownResponse(**breakdown.as_dict())
+
+
+# ---------------------------------------------------------------------------
+# API: KJ product management (configurable premium slot products)
+# ---------------------------------------------------------------------------
+
+
+class ProductCreateRequest(BaseModel):
+    """Create a new premium slot product for a venue."""
+    venue_id: int
+    name: str  # e.g. "Premium Slot - $5", "Skip the Queue - $6"
+    description: str = ""
+    amount_usd: float  # e.g. 5.00, 6.00
+
+
+class ProductUpdateRequest(BaseModel):
+    """Update an existing product (e.g. enable/disable)."""
+    product_id: int  # local DB ID
+    active: bool | None = None
+    name: str | None = None
+    description: str | None = None
+
+
+class ProductOut(BaseModel):
+    id: int  # local DB ID
+    venue_id: int
+    name: str
+    description: str
+    amount_usd: float
+    active: bool
+    stripe_product_id: str | None = None
+    stripe_price_id: str | None = None
+
+
+class ProductListResponse(BaseModel):
+    products: list[ProductOut]
+
+
+@app.get(
+    f"{API_PREFIX}/connect/products",
+    response_model=ProductListResponse,
+)
+def list_products(venue_id: int = Query(..., description="Venue ID")):
+    """List all premium slot products for a venue.
+
+    Returns both active and inactive products. Products are created on
+    Stripe (on the KJ's connected account) and tracked locally.
+    """
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM kj_products WHERE venue_id=? ORDER BY active DESC, id ASC",
+            (venue_id,),
+        ).fetchall()
+
+    products = [
+        ProductOut(
+            id=r["id"],
+            venue_id=r["venue_id"],
+            name=r["name"],
+            description=r["description"] or "",
+            amount_usd=r["amount_cents"] / 100,
+            active=bool(r["active"]),
+            stripe_product_id=r["stripe_product_id"],
+            stripe_price_id=r["stripe_price_id"],
+        )
+        for r in rows
+    ]
+    return ProductListResponse(products=products)
+
+
+@app.post(
+    f"{API_PREFIX}/connect/products",
+    response_model=ProductOut,
+)
+def create_product(req: ProductCreateRequest):
+    """Create a new premium slot product for a venue's KJ.
+
+    Creates a Stripe Product + Price on the KJ's connected account and
+    tracks it locally. The KJ can create multiple products (e.g. a $5
+    skip on slow nights, a $6 skip on busy nights) and enable/disable
+    them based on traffic.
+    """
+    with db() as conn:
+        venue = conn.execute(
+            "SELECT * FROM venues WHERE id = ?", (req.venue_id,)
+        ).fetchone()
+    if not venue:
+        raise HTTPException(status_code=404, detail="Venue not found")
+
+    acct_id = venue["stripe_account_id"] if "stripe_account_id" in venue.keys() else None
+    onboarding = venue["stripe_onboarding_status"] if "stripe_onboarding_status" in venue.keys() else "none"
+
+    if not acct_id or onboarding != "active":
+        raise HTTPException(
+            status_code=400,
+            detail="KJ must complete Stripe onboarding before creating products.",
+        )
+
+    amount_cents = int(round(req.amount_usd * 100))
+
+    # Create product + price on Stripe (on the connected account)
+    try:
+        stripe_product_id = connect.create_product(
+            connected_account_id=acct_id,
+            name=req.name,
+            description=req.description,
+            metadata={"venue_id": str(req.venue_id)},
+        )
+        stripe_price_id = connect.create_price(
+            connected_account_id=acct_id,
+            product_id=stripe_product_id,
+            amount_cents=amount_cents,
+            metadata={"venue_id": str(req.venue_id)},
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502, detail=f"Stripe error creating product: {e}"
+        )
+
+    # Track locally
+    with db() as conn:
+        cur = conn.execute(
+            """INSERT INTO kj_products
+               (venue_id, stripe_product_id, stripe_price_id, name, description, amount_cents, active)
+               VALUES (?, ?, ?, ?, ?, ?, 1)""",
+            (req.venue_id, stripe_product_id, stripe_price_id,
+             req.name, req.description, amount_cents),
+        )
+        product_db_id = cur.lastrowid
+        row = conn.execute(
+            "SELECT * FROM kj_products WHERE id=?", (product_db_id,)
+        ).fetchone()
+
+    return ProductOut(
+        id=row["id"],
+        venue_id=row["venue_id"],
+        name=row["name"],
+        description=row["description"] or "",
+        amount_usd=row["amount_cents"] / 100,
+        active=bool(row["active"]),
+        stripe_product_id=row["stripe_product_id"],
+        stripe_price_id=row["stripe_price_id"],
+    )
+
+
+@app.patch(
+    f"{API_PREFIX}/connect/products",
+    response_model=ProductOut,
+)
+def update_product(req: ProductUpdateRequest):
+    """Update a product (rename, change description, enable/disable).
+
+    Disabling a product (active=False) deactivates it on Stripe and
+    hides it from the patron-facing app. The product remains in the
+    KJ's Stripe dashboard for re-enabling later.
+    """
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM kj_products WHERE id=?", (req.product_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    with db() as conn:
+        venue = conn.execute(
+            "SELECT * FROM venues WHERE id=?", (row["venue_id"],)
+        ).fetchone()
+    acct_id = venue["stripe_account_id"] if venue and "stripe_account_id" in venue.keys() else None
+
+    # Update on Stripe if we have the account
+    if acct_id and row["stripe_product_id"] and not STRIPE_SECRET_KEY.startswith("sk_tes"):
+        try:
+            connect.update_product(
+                connected_account_id=acct_id,
+                product_id=row["stripe_product_id"],
+                active=req.active,
+                name=req.name,
+                description=req.description,
+            )
+        except Exception:
+            pass  # Best-effort sync
+
+    # Update locally
+    with db() as conn:
+        if req.active is not None:
+            conn.execute(
+                "UPDATE kj_products SET active=? WHERE id=?",
+                (int(req.active), req.product_id),
+            )
+        if req.name:
+            conn.execute(
+                "UPDATE kj_products SET name=? WHERE id=?",
+                (req.name, req.product_id),
+            )
+        if req.description is not None:
+            conn.execute(
+                "UPDATE kj_products SET description=? WHERE id=?",
+                (req.description, req.product_id),
+            )
+        row = conn.execute(
+            "SELECT * FROM kj_products WHERE id=?", (req.product_id,)
+        ).fetchone()
+
+    return ProductOut(
+        id=row["id"],
+        venue_id=row["venue_id"],
+        name=row["name"],
+        description=row["description"] or "",
+        amount_usd=row["amount_cents"] / 100,
+        active=bool(row["active"]),
+        stripe_product_id=row["stripe_product_id"],
+        stripe_price_id=row["stripe_price_id"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1651,6 +1942,10 @@ async def stripe_webhook(request: Request) -> dict[str, str]:
             status = "pending_verification"
         else:
             status = "needs_onboarding"
+
+        # When account becomes active, configure daily payouts
+        if status == "active" and not STRIPE_SECRET_KEY.startswith("sk_tes"):
+            connect.set_daily_payouts(acct_id)
 
         # Update the venue that owns this account (legacy)
         with db() as conn:
