@@ -23,8 +23,7 @@ import type {
  */
 const API_BASE: string =
   (Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL as string | undefined) ||
-  // EXPO_PUBLIC_* vars are inlined by Metro at build time.
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_URL) ||
+  process.env.EXPO_PUBLIC_API_URL ||
   'http://localhost:8000/api';
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {

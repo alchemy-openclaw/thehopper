@@ -49,6 +49,10 @@
     ],
     "experiments": {
       "tscPaths": true
+    },
+    "extra": {
+      "EXPO_PUBLIC_API_URL": "https://thehopper-api.alchemycreativelounge.com/api",
+      "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51S0HoNPqi0Pe8qbKcTaUKGgsIL3T1EhFSNHWJDZ8tyyiZi6ZfxgIuIu2X6pMzgKWIuToo3wNwm3rqYtagiVdx1XA00oCM0bedf"
     }
   }
 }
