@@ -10,7 +10,7 @@ set +a
 
 # Load Twilio from Hermes .env
 TWILIO_ACCOUNT_SID=$(grep TWILIO_ACCOUNT_SID ~/.hermes/.env | cut -d= -f2)
-TWILIO_AUTH_TOKEN=*** TWILIO_AUTH_TOKEN ~/.hermes/.env | cut -d= -f2)
+TWILIO_AUTH_TOKEN=$(grep TWILIO_AUTH_TOKEN ~/.hermes/.env | cut -d= -f2)
 TWILIO_FROM_NUMBER=$(grep TWILIO_PHONE_NUMBER ~/.hermes/.env | cut -d= -f2)
 export TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_FROM_NUMBER
 
