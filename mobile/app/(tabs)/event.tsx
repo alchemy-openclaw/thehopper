@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +20,7 @@ import {
   Card,
   EmptyState,
   Loading,
+  MetaPill,
 } from '../../src/components';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
@@ -48,44 +51,27 @@ export default function EventScreen() {
   const venue = selectedVenue;
 
   return (
-    <ScrollView
+    <KeyboardAvoidingView
       style={styles.container}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      {/* Venue header */}
-      <Card>
-        <Text style={styles.venueName}>{venue.name}</Text>
-        <Text style={styles.venueCity}>{venue.city}</Text>
+      {/* Venue header (compact — matches venue list style) */}
+      <Card style={styles.headerCard}>
+        <View style={styles.venueHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.venueName}>{venue.name}</Text>
+            <Text style={styles.venueCity}>{venue.city}</Text>
+          </View>
+        </View>
         <View style={styles.venueMeta}>
           {venue.karaoke_nights.map((n) => (
-            <Text key={n} style={styles.metaText}>· {n}</Text>
+            <MetaPill key={n} label={n} variant="nights" />
           ))}
-          <Text style={styles.metaText}>· 🕘 {venue.start_time}–{venue.end_time}</Text>
-          {venue.kj_name && <Text style={styles.metaText}>· KJ: {venue.kj_name}</Text>}
+          <MetaPill label={`🕘 ${venue.start_time}–${venue.end_time}`} />
+          {venue.kj_name && <MetaPill label={`KJ: ${venue.kj_name}`} />}
         </View>
         {venue.vibe ? <Text style={styles.venueVibe}>{venue.vibe}</Text> : null}
-
-        {/* Subtle action row */}
-        <View style={styles.actionRow}>
-          <Pressable
-            onPress={() => setShowPay(true)}
-            style={({ pressed }) => [styles.subtleBtn, pressed && styles.subtleBtnPressed]}
-          >
-            <Text style={styles.subtleBtnText}>
-              ⏭️ Jump Queue · ${venue.price_jump_queue.toFixed(2)}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setShowTip(true)}
-            style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnTip, pressed && styles.subtleBtnPressed]}
-          >
-            <Text style={styles.subtleBtnText}>
-              💰 Tip KJ
-            </Text>
-          </Pressable>
-        </View>
-
         {!config?.stripe_configured && (
           <Text style={styles.testModeNote}>
             Test mode — no real charges will be made.
@@ -93,10 +79,29 @@ export default function EventScreen() {
         )}
       </Card>
 
-      {/* Chat */}
+      {/* Chat fills the remaining space */}
       <View style={styles.chatSection}>
-        <Text style={styles.chatHeader}>💬 Venue Chat</Text>
         <ChatPanel venue={venue} />
+      </View>
+
+      {/* Action buttons anchored at bottom */}
+      <View style={styles.actionBar}>
+        <Pressable
+          onPress={() => setShowPay(true)}
+          style={({ pressed }) => [styles.subtleBtn, pressed && styles.subtleBtnPressed]}
+        >
+          <Text style={styles.subtleBtnText}>
+            ⏭️ Jump Queue · ${venue.price_jump_queue.toFixed(2)}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setShowTip(true)}
+          style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnTip, pressed && styles.subtleBtnPressed]}
+        >
+          <Text style={styles.subtleBtnText}>
+            💰 Tip KJ
+          </Text>
+        </Pressable>
       </View>
 
       {/* Modals */}
@@ -106,14 +111,13 @@ export default function EventScreen() {
         visible={showPay}
         onClose={() => setShowPay(false)}
       />
-
       <TipModal
         venue={venue}
         stripeConfigured={config?.stripe_configured ?? false}
         visible={showTip}
         onClose={() => setShowTip(false)}
       />
-    </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -534,39 +538,48 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   content: { padding: Spacing.lg, paddingBottom: 100 },
 
-  // Venue header card
+  // Venue header card (compact, matches venue list)
+  headerCard: {
+    marginBottom: 0,
+  },
+  venueHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
   venueName: {
     ...Typography.title,
     color: Colors.text,
   },
   venueCity: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.cyan,
     fontWeight: '600',
     marginTop: 2,
   },
   venueMeta: {
-    marginTop: Spacing.md,
-    gap: 4,
-  },
-  metaText: {
-    fontSize: 13,
-    color: Colors.textDim,
-    fontWeight: '500',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 10,
   },
   venueVibe: {
-    marginTop: Spacing.sm,
+    marginTop: 10,
     fontSize: 14,
     color: Colors.textDim,
     lineHeight: 20,
     fontStyle: 'italic',
   },
 
-  // Subtle action buttons
-  actionRow: {
+  // Action bar anchored at bottom
+  actionBar: {
     flexDirection: 'row',
     gap: Spacing.sm,
-    marginTop: Spacing.lg,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.lg + 8,
+    backgroundColor: Colors.bg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
   },
   subtleBtn: {
     flex: 1,
@@ -597,16 +610,14 @@ const styles = StyleSheet.create({
     color: Colors.textMute,
   },
 
-  // Chat section
+  // Chat section — fills remaining space between header and action bar
   chatSection: {
-    marginTop: Spacing.lg,
-  },
-  chatHeader: {
-    ...Typography.heading,
-    color: Colors.text,
-    marginBottom: Spacing.sm,
+    flex: 1,
+    padding: Spacing.lg,
+    paddingBottom: 0,
   },
   chatPanel: {
+    flex: 1,
     backgroundColor: Colors.panel,
     borderRadius: Radius.md,
     borderWidth: 1,
@@ -624,7 +635,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chatMessages: {
-    height: 320,
+    flex: 1,
   },
   chatMessagesContent: {
     gap: Spacing.md,
