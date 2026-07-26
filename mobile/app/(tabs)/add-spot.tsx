@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import * as SecureStore from 'expo-secure-store';
+import { setItem as secureSet } from '../../src/secure-storage';
 import { api, API_BASE } from '../../src/api';
 import type { KJ } from '../../src/types';
 import {
@@ -91,7 +91,7 @@ export default function AddSpotScreen() {
     try {
       const res = await api.verifyPhone(submitterPhone, code);
       if (res.verified && res.token) {
-        await SecureStore.setItemAsync('thehopper_session_token', res.token);
+        await secureSet('thehopper_session_token', res.token);
         setPhoneVerified(true);
       }
     } catch (e) {
