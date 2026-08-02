@@ -42,7 +42,7 @@ import stripe
 # Configuration
 # ---------------------------------------------------------------------------
 
-PLATFORM_FEE_PCT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PCT", "15.0"))
+PLATFORM_FEE_PCT = float(os.environ.get("STRIPE_CONNECT_PLATFORM_FEE_PCT", "10.0"))
 RETURN_URL = os.environ.get(
     "STRIPE_CONNECT_RETURN_URL",
     "http://localhost:5173",  # Vite dev server default

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -11,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import * as LinkingExpo from 'expo-linking';
 import type { AppConfig, ChatMessage, Venue } from '../../src/types';
 import { api, API_BASE } from '../../src/api';
 import { useVenueContext } from '../../src/venue-context';
@@ -32,6 +35,38 @@ export default function EventScreen() {
 
   useEffect(() => {
     api.getConfig().then(setConfig).catch(() => setConfig(null));
+  }, []);
+
+  // Handle deep link redirects from Stripe checkout (thehopper://payment-success|payment-cancelled)
+  useEffect(() => {
+    const handleDeepLink = (url: string | null) => {
+      if (!url) return;
+      let parsed: { path?: string; queryParams?: Record<string, string> };
+      try {
+        parsed = LinkingExpo.parse(url);
+      } catch {
+        return;
+      }
+      const path = parsed.path || '';
+      const params = parsed.queryParams || {};
+      if (path === 'payment-success') {
+        WebBrowser.dismissBrowser();
+        Alert.alert(
+          'Payment Received',
+          'Your premium slot request has been sent to the KJ. They\'ll confirm your position.',
+        );
+      } else if (path === 'payment-cancelled') {
+        WebBrowser.dismissBrowser();
+        Alert.alert('Payment Cancelled', 'No charge was made.');
+      }
+    };
+
+    // Check if app was opened from a deep link
+    Linking.getInitialURL().then(handleDeepLink);
+
+    // Listen for deep links while app is open
+    const sub = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
+    return () => sub.remove();
   }, []);
 
   if (!selectedVenue) {

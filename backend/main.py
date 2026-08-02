@@ -1831,6 +1831,7 @@ def create_payment_session(req: PaymentRequest):
         if use_connect:
             # Destination charge: customer pays, platform fee is taken,
             # remainder transfers to KJ's connected account.
+            # Deep link redirects back to the mobile app via custom scheme
             session = stripe.checkout.Session.create(
                 payment_method_types=["card"],
                 line_items=[
@@ -1847,8 +1848,8 @@ def create_payment_session(req: PaymentRequest):
                     }
                 ],
                 mode="payment",
-                success_url=f"{PUBLIC_APP_URL}/?payment=success&venue_id={req.venue_id}",
-                cancel_url=f"{PUBLIC_APP_URL}/?payment=cancelled&venue_id={req.venue_id}",
+                success_url=f"thehopper://payment-success?venue_id={req.venue_id}",
+                cancel_url=f"thehopper://payment-cancelled?venue_id={req.venue_id}",
                 payment_intent_data={
                     "application_fee_amount": fee.platform_fee_cents,
                     "transfer_data": {
@@ -1883,8 +1884,8 @@ def create_payment_session(req: PaymentRequest):
                     }
                 ],
                 mode="payment",
-                success_url=f"{PUBLIC_APP_URL}/?payment=success&venue_id={req.venue_id}",
-                cancel_url=f"{PUBLIC_APP_URL}/?payment=cancelled&venue_id={req.venue_id}",
+                success_url=f"thehopper://payment-success?venue_id={req.venue_id}",
+                cancel_url=f"thehopper://payment-cancelled?venue_id={req.venue_id}",
                 metadata={
                     "payment_id": str(payment_id),
                     "venue_id": str(req.venue_id),
