@@ -1968,6 +1968,7 @@ async def stripe_webhook(request: Request) -> dict[str, str]:
             raise HTTPException(status_code=400, detail="Invalid JSON")
 
     event_type = event.get("type", "")
+    print(f"[Webhook] Received event: {event_type}", flush=True)
 
     # --- Payment completed ---
     if event_type == "checkout.session.completed":
@@ -1976,6 +1977,7 @@ async def stripe_webhook(request: Request) -> dict[str, str]:
         venue_id = sess.get("metadata", {}).get("venue_id")
         singer_name = sess.get("metadata", {}).get("singer_name", "Someone")
         song_request = sess.get("metadata", {}).get("song_request", "")
+        print(f"[Webhook] checkout.session.completed: payment_id={pid}, venue_id={venue_id}, metadata={sess.get('metadata', {})}", flush=True)
         if pid:
             with db() as conn:
                 conn.execute(
