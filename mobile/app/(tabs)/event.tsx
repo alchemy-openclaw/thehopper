@@ -369,6 +369,7 @@ function PaymentModal({
       }
       const result = await WebBrowser.openAuthSessionAsync(url);
       onClose();
+      console.log('[Payment] openAuthSession result:', JSON.stringify(result));
       if (result.type === 'success' && result.url) {
         const parsed = LinkingExpo.parse(result.url);
         if (parsed.path === 'payment-success') {
@@ -378,16 +379,24 @@ function PaymentModal({
           );
         } else if (parsed.path === 'payment-cancelled') {
           Alert.alert('Payment Cancelled', 'No charge was made.');
+        } else {
+          Alert.alert(
+            'Checkout Complete',
+            'Your premium slot request has been sent to the KJ.',
+          );
         }
       } else if (result.type === 'success') {
-        // Browser closed without a redirect (user manually dismissed)
-        // Payment may still have completed -- webhook will confirm
         Alert.alert(
           'Checkout Closed',
           'If you completed payment, your premium slot request has been sent to the KJ.',
         );
       } else if (result.type === 'cancel') {
         Alert.alert('Payment Cancelled', 'No charge was made.');
+      } else {
+        Alert.alert(
+          'Checkout Closed',
+          'If you completed payment, your premium slot request has been sent to the KJ.',
+        );
       }
     } catch (e) {
       setError(
