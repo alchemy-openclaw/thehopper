@@ -15,12 +15,18 @@ import {
 } from '../../src/components';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
+/** What's currently narrowing the venue list. `all` is the default display. */
+type Filter =
+  | { kind: 'all' }
+  | { kind: 'near' }
+  | { kind: 'city'; city: string };
+
 export default function VenuesScreen() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [city, setCity] = useState('');
-  const [hasLocation, setHasLocation] = useState(false);
+  const [filter, setFilter] = useState<Filter>({ kind: 'all' });
   const [config, setConfig] = useState<AppConfig | null>(null);
   const { selectVenue } = useVenueContext();
 
@@ -46,7 +52,7 @@ export default function VenuesScreen() {
     setError(null);
     try {
       const { lat, lng } = await getGeolocation();
-      setHasLocation(true);
+      setFilter({ kind: 'near' });
       setCity('');
       await loadVenues(lat, lng);
     } catch (e) {
@@ -55,14 +61,33 @@ export default function VenuesScreen() {
   };
 
   const handleCitySearch = () => {
-    setHasLocation(false);
-    loadVenues(undefined, undefined, city.trim() || undefined);
+    const trimmed = city.trim();
+    if (!trimmed) {
+      handleShowAll();
+      return;
+    }
+    setFilter({ kind: 'city', city: trimmed });
+    loadVenues(undefined, undefined, trimmed);
+  };
+
+  /** Return to the unfiltered list — the way back from a location or city search. */
+  const handleShowAll = () => {
+    setCity('');
+    setFilter({ kind: 'all' });
+    loadVenues();
   };
 
   const handleSelectVenue = (venue: Venue) => {
     selectVenue(venue);
     router.push('/(tabs)/event');
   };
+
+  const filterLabel =
+    filter.kind === 'near'
+      ? 'Sorted by distance from your location.'
+      : filter.kind === 'city'
+        ? `Showing venues in “${filter.city}”.`
+        : null;
 
   return (
     <ScrollView
@@ -89,8 +114,16 @@ export default function VenuesScreen() {
             style={styles.goBtn}
           />
         </View>
-        {hasLocation && (
-          <Banner message="Sorted by distance from your location." variant="info" />
+        {filterLabel && (
+          <View style={styles.filterRow}>
+            <Text style={styles.filterText}>{filterLabel}</Text>
+            <Button
+              label="Show all"
+              variant="secondary"
+              onPress={handleShowAll}
+              style={styles.clearBtn}
+            />
+          </View>
         )}
       </Card>
 
@@ -99,7 +132,19 @@ export default function VenuesScreen() {
       {loading ? (
         <Loading label="Finding karaoke…" />
       ) : venues.length === 0 ? (
-        <EmptyState icon="🗺️" message="No venues found. Try another city." />
+        <View>
+          <EmptyState
+            icon="🗺️"
+            message={
+              filter.kind === 'city'
+                ? `No venues in “${filter.city}” yet.`
+                : 'No venues found.'
+            }
+          />
+          {filter.kind !== 'all' && (
+            <Button label="← Back to all venues" onPress={handleShowAll} />
+          )}
+        </View>
       ) : (
         venues.map((v) => (
           <VenueCard
@@ -189,6 +234,21 @@ const styles = StyleSheet.create({
   },
   goBtn: {
     paddingHorizontal: 18,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  filterText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.textDim,
+    lineHeight: 18,
+  },
+  clearBtn: {
+    paddingHorizontal: 14,
   },
   venueHeader: {
     flexDirection: 'row',

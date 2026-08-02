@@ -60,7 +60,17 @@ STRIPE_PUBLISHABLE_KEY = os.environ.get(
 )
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
+# Stripe requires absolute success/cancel URLs on Checkout Sessions — a relative
+# path is rejected with an InvalidRequestError, so this must be set correctly
+# before live keys are used.
+PUBLIC_APP_URL = os.environ.get(
+    "PUBLIC_APP_URL", "https://thehopper.alchemycreativelounge.com"
+).rstrip("/")
+
 stripe.api_key = STRIPE_SECRET_KEY
+
+# True when we are pointed at Stripe's live environment (real money).
+STRIPE_LIVE_MODE = STRIPE_SECRET_KEY.startswith("sk_live_")
 
 # Stripe Connect manager for marketplace payments (Express accounts)
 connect = ConnectManager()
@@ -828,9 +838,60 @@ class VenueConnectionManager:
 chat_manager = VenueConnectionManager()
 
 
+def _check_live_mode_config() -> None:
+    """Refuse to serve live traffic with a half-migrated Stripe config.
+
+    Every item here silently produces a broken or wrong charge at runtime
+    rather than an obvious error, so we fail at boot instead.
+    """
+    if not STRIPE_LIVE_MODE:
+        return
+
+    problems: list[str] = []
+
+    if not STRIPE_PUBLISHABLE_KEY.startswith("pk_live_"):
+        problems.append(
+            "STRIPE_PUBLISHABLE_KEY is not a live key (expected pk_live_…)"
+        )
+    if not STRIPE_WEBHOOK_SECRET:
+        problems.append(
+            "STRIPE_WEBHOOK_SECRET is unset — webhook payloads would be accepted "
+            "unverified, so anyone could mark a payment as paid"
+        )
+    if not PUBLIC_APP_URL.startswith("https://"):
+        problems.append(
+            f"PUBLIC_APP_URL must be an absolute https URL for Stripe Checkout "
+            f"redirects (got {PUBLIC_APP_URL!r})"
+        )
+
+    # Test-mode connected accounts do not exist in live mode; a destination
+    # charge against one fails after the customer has already entered a card.
+    with db() as conn:
+        stale = sum(
+            conn.execute(
+                f"SELECT COUNT(*) AS n FROM {table} "
+                "WHERE stripe_account_id IS NOT NULL AND stripe_account_id != ''"
+            ).fetchone()["n"]
+            for table in ("venues", "kjs")
+        )
+    if stale:
+        problems.append(
+            f"{stale} venue/KJ row(s) still carry Stripe Connect accounts created in "
+            "test mode — clear stripe_account_id and stripe_onboarding_status, then "
+            "re-onboard those KJs against live mode"
+        )
+
+    if problems:
+        raise RuntimeError(
+            "Stripe live mode is enabled but the configuration is incomplete:\n  - "
+            + "\n  - ".join(problems)
+        )
+
+
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    _check_live_mode_config()
 
 
 # ---------------------------------------------------------------------------
@@ -1786,8 +1847,8 @@ def create_payment_session(req: PaymentRequest):
                     }
                 ],
                 mode="payment",
-                success_url=f"/?payment=success&venue_id={req.venue_id}",
-                cancel_url=f"/?payment=cancelled&venue_id={req.venue_id}",
+                success_url=f"{PUBLIC_APP_URL}/?payment=success&venue_id={req.venue_id}",
+                cancel_url=f"{PUBLIC_APP_URL}/?payment=cancelled&venue_id={req.venue_id}",
                 payment_intent_data={
                     "application_fee_amount": fee.platform_fee_cents,
                     "transfer_data": {
@@ -1822,8 +1883,8 @@ def create_payment_session(req: PaymentRequest):
                     }
                 ],
                 mode="payment",
-                success_url=f"/?payment=success&venue_id={req.venue_id}",
-                cancel_url=f"/?payment=cancelled&venue_id={req.venue_id}",
+                success_url=f"{PUBLIC_APP_URL}/?payment=success&venue_id={req.venue_id}",
+                cancel_url=f"{PUBLIC_APP_URL}/?payment=cancelled&venue_id={req.venue_id}",
                 metadata={
                     "payment_id": str(payment_id),
                     "venue_id": str(req.venue_id),
