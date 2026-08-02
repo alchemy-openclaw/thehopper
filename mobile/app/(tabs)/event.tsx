@@ -379,6 +379,15 @@ function PaymentModal({
         } else if (parsed.path === 'payment-cancelled') {
           Alert.alert('Payment Cancelled', 'No charge was made.');
         }
+      } else if (result.type === 'success') {
+        // Browser closed without a redirect (user manually dismissed)
+        // Payment may still have completed -- webhook will confirm
+        Alert.alert(
+          'Checkout Closed',
+          'If you completed payment, your premium slot request has been sent to the KJ.',
+        );
+      } else if (result.type === 'cancel') {
+        Alert.alert('Payment Cancelled', 'No charge was made.');
       }
     } catch (e) {
       setError(
