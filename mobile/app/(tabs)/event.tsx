@@ -367,8 +367,19 @@ function PaymentModal({
       if (url.startsWith('/')) {
         url = `${API_BASE.replace(/\/api$/, '')}${url}`;
       }
-      await WebBrowser.openBrowserAsync(url);
+      const result = await WebBrowser.openAuthSessionAsync(url);
       onClose();
+      if (result.type === 'success' && result.url) {
+        const parsed = LinkingExpo.parse(result.url);
+        if (parsed.path === 'payment-success') {
+          Alert.alert(
+            'Payment Received',
+            'Your premium slot request has been sent to the KJ. They\'ll confirm your position.',
+          );
+        } else if (parsed.path === 'payment-cancelled') {
+          Alert.alert('Payment Cancelled', 'No charge was made.');
+        }
+      }
     } catch (e) {
       setError(
         e instanceof Error ? e.message : 'Payment session could not be created',
@@ -484,8 +495,19 @@ function TipModal({
       if (url.startsWith('/')) {
         url = `${API_BASE.replace(/\/api$/, '')}${url}`;
       }
-      await WebBrowser.openBrowserAsync(url);
+      const result = await WebBrowser.openAuthSessionAsync(url);
       setSuccess(true);
+      if (result.type === 'success' && result.url) {
+        const parsed = LinkingExpo.parse(result.url);
+        if (parsed.path === 'payment-success') {
+          Alert.alert(
+            'Tip Received',
+            'Thank you for supporting the KJ!',
+          );
+        } else if (parsed.path === 'payment-cancelled') {
+          Alert.alert('Tip Cancelled', 'No charge was made.');
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create tip session');
     } finally {
