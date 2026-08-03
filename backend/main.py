@@ -2739,114 +2739,354 @@ def kj_stripe_status(kj_id: int):
 def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     """Render a self-contained HTML page for a KJ's business.
 
-    Stripe requires a public URL that advertises the products/services
-    offered by the connected account. This page shows the KJ's name, bio,
-    venues, and karaoke schedule — enough for Stripe's verification.
+    This is the public-facing page Stripe uses to verify the connected
+    account is a real business. It includes:
+      - branded karaokespot.us header
+      - KJ business name, bio, contact info, social links
+      - weekly schedule table organized by day
+      - venue cards with full details (address, hours, vibe)
+      - services overview
+      - footer with business info
     """
     import html
 
-    business_name = kj["business_name"] or kj["name"]
-    tagline = "Karaoke Jockey"
-    if kj["bio"]:
-        tagline = kj["bio"]
+    biz = kj["business_name"] or kj["name"]
+    biz_esc = html.escape(biz)
+    bio = html.escape(kj["bio"] or "Karaoke host serving Brevard County, Florida. Live karaoke nights, song suggestions, and premium slot bookings through TheHopper.")
+    kj_phone = kj["phone"] or ""
+    kj_phone_display = kj_phone
+    kj_instagram = kj["instagram"] or ""
+    kj_website = kj["website"] or ""
+    slug = kj["site_slug"] or ""
 
-    insta_link = ""
-    if kj["instagram"]:
-        insta = html.escape(kj["instagram"])
-        insta_link = f'<a href="https://instagram.com/{insta}" target="_blank" rel="noopener">instagram</a>'
-    site_link = ""
-    if kj["website"]:
-        site = html.escape(kj["website"])
-        site_link = f'<a href="{site}" target="_blank" rel="noopener">website</a>'
+    # Social links
+    social_html = ""
+    links = []
+    if kj_instagram:
+        ig = html.escape(kj_instagram.lstrip("@"))
+        links.append(f'<a href="https://instagram.com/{ig}" target="_blank" rel="noopener" class="social-link"><span class="ico">IG</span> @{ig}</a>')
+    if kj_website:
+        ws = html.escape(kj_website)
+        links.append(f'<a href="{ws}" target="_blank" rel="noopener" class="social-link"><span class="ico">WWW</span> {ws.replace("https://","").replace("http://","")}</a>')
+    if kj_phone:
+        links.append(f'<a href="tel:{html.escape(kj_phone)}" class="social-link"><span class="ico">TEL</span> {html.escape(kj_phone_display)}</a>')
+    social_html = "\n      ".join(links) if links else ""
 
+    # Build venue cards + schedule data
     venue_cards = []
+    schedule_by_day: dict[str, list[str]] = {}
     for v in venues:
+        v_name = html.escape(v["name"])
+        v_addr = html.escape(v["address"])
+        v_city = html.escape(v["city"])
+        v_phone = v["phone"] or ""
+        v_website = v["website"] or ""
+        v_vibe = html.escape(v["vibe"] or "")
         nights_raw = v["karaoke_nights"] or ""
         nights_list = [n.strip() for n in nights_raw.split(",") if n.strip()]
         nights_display = ", ".join(nights_list) if nights_list else "schedule varies"
+        start = html.escape(v["start_time"] or "")
+        end = html.escape(v["end_time"] or "")
+
+        # venue links
+        v_links_html = ""
+        v_links = []
+        if v_website:
+            v_links.append(f'<a href="{html.escape(v_website)}" target="_blank" rel="noopener">website</a>')
+        if v_phone:
+            v_links.append(f'<a href="tel:{html.escape(v_phone)}">call</a>')
+        if v_links:
+            v_links_html = f'<div class="v-links">{" &middot; ".join(v_links)}</div>'
+
         venue_cards.append(f"""
-        <div class="venue">
-          <h3>{html.escape(v["name"])}</h3>
-          <p class="address">{html.escape(v["address"])}, {html.escape(v["city"])}</p>
-          <p class="schedule">{html.escape(nights_display)} &middot; {html.escape(v["start_time"])}&ndash;{html.escape(v["end_time"])}</p>
-          {f'<p class="vibe">{html.escape(v["vibe"])}</p>' if v["vibe"] else ''}
+        <div class="venue-card">
+          <h3>{v_name}</h3>
+          <p class="v-addr">{v_addr}, {v_city}</p>
+          <p class="v-sched">{html.escape(nights_display)} &middot; {start}&ndash;{end}</p>
+          {f'<p class="v-vibe">{v_vibe}</p>' if v_vibe else ''}
+          {v_links_html}
         </div>""")
 
-    venues_html = "\n".join(venue_cards) if venue_cards else '<p class="empty">No venues listed yet.</p>'
+        for night in nights_list:
+            if night not in schedule_by_day:
+                schedule_by_day[night] = []
+            schedule_by_day[night].append(f"{v_name} ({start}&ndash;{end})")
 
-    # serif, lowercase, no italics, clean — matching Roscoe's style prefs
+    venues_html = "\n".join(venue_cards) if venue_cards else '<p class="empty">No venues listed yet. Check back soon for upcoming karaoke nights.</p>'
+
+    # Build weekly schedule table
+    day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    day_short = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+    schedule_rows = []
+    for day in day_order:
+        gigs = schedule_by_day.get(day, [])
+        if gigs:
+            # gigs entries already contain escaped HTML entities (&ndash;),
+            # so we join them directly without re-escaping
+            gigs_html = "<br>".join(gigs)
+            schedule_rows.append(f'<tr class="has-gig"><td class="day">{day_short[day]}</td><td>{gigs_html}</td></tr>')
+        else:
+            schedule_rows.append(f'<tr><td class="day dim">{day_short[day]}</td><td class="dim">dark night</td></tr>')
+    schedule_html = "\n      ".join(schedule_rows)
+
+    venues_count = len(venues)
+    services_html = f"""
+    <div class="service">
+      <h3>Live Karaoke Hosting</h3>
+      <p>Professional karaoke hosting at {venues_count} venue{'s' if venues_count != 1 else ''} across Brevard County. Full song catalog, sound equipment setup, and crowd engagement.</p>
+    </div>
+    <div class="service">
+      <h3>Song Suggestions</h3>
+      <p>Singers get personalized song recommendations matched to their vocal range and style through TheHopper app. Discover your perfect karaoke song.</p>
+    </div>
+    <div class="service">
+      <h3>Premium Slots</h3>
+      <p>Reserve a preferred singing time slot in the rotation. A community-focused feature that supports the venue and the KJ while keeping the night flowing.</p>
+    </div>"""
+
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{html.escape(business_name)} &mdash; karaoke</title>
+  <title>{biz_esc} &mdash; Karaoke Host | karaokespot.us</title>
+  <meta name="description" content="{biz_esc} is a professional karaoke host serving Brevard County, FL. View upcoming karaoke nights, venues, and booking information.">
   <style>
     :root {{
-      --bg: #1a1a2e;
-      --panel: #262640;
-      --border: #3a3a55;
+      --bg: #0f0f1a;
+      --bg2: #161628;
+      --panel: #1c1c34;
+      --panel2: #242444;
+      --border: #2e2e50;
       --text: #e8e4f0;
       --dim: #a09ab8;
       --mute: #6a6585;
       --pink: #c4568d;
       --cyan: #5fb8a8;
+      --yellow: #d4c372;
+      --max: 720px;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
       font-family: georgia, "times new roman", serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.6;
-      max-width: 640px;
-      margin: 0 auto;
-      padding: 2rem 1rem;
+      line-height: 1.65;
     }}
-    header {{ margin-bottom: 2rem; }}
-    h1 {{ font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }}
-    .tagline {{ color: var(--dim); font-size: 1.1rem; }}
-    .links {{ margin-top: 0.75rem; display: flex; gap: 1rem; flex-wrap: wrap; }}
-    .links a {{ color: var(--cyan); text-decoration: none; font-size: 0.95rem; }}
-    .links a:hover {{ text-decoration: underline; }}
-    .section-label {{
-      font-size: 0.75rem;
+    .wrap {{ max-width: var(--max); margin: 0 auto; padding: 0 1rem 4rem; }}
+
+    /* site header */
+    .site-header {{
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0.6rem 1rem;
+    }}
+    .site-header .wrap {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 0;
+    }}
+    .brand {{
+      font-family: georgia, serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--cyan);
+      letter-spacing: -0.02em;
+    }}
+    .brand a {{ color: var(--cyan); text-decoration: none; }}
+    .brand-tag {{ color: var(--mute); font-size: 0.75rem; font-weight: 400; }}
+
+    /* hero */
+    .hero {{
+      padding: 3rem 0 2rem;
+      text-align: center;
+    }}
+    .hero h1 {{
+      font-size: 2.4rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.03em;
+    }}
+    .hero .tagline {{
+      color: var(--dim);
+      font-size: 1.15rem;
+      max-width: 480px;
+      margin: 0 auto 1.5rem;
+    }}
+    .social-row {{
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }}
+    .social-link {{
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.4rem 0.9rem;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-family: -apple-system, system-ui, sans-serif;
+    }}
+    .social-link:hover {{ border-color: var(--cyan); }}
+    .social-link .ico {{
+      background: var(--panel2);
+      border-radius: 4px;
+      padding: 0.1rem 0.3rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--mute);
+    }}
+
+    /* sections */
+    .section {{ margin-top: 3rem; }}
+    .section-title {{
+      font-size: 0.8rem;
       font-weight: 700;
       color: var(--mute);
       text-transform: uppercase;
-      letter-spacing: 0.05rem;
-      margin: 2rem 0 0.75rem;
+      letter-spacing: 0.08em;
+      margin-bottom: 1rem;
+      font-family: -apple-system, system-ui, sans-serif;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
     }}
-    .venue {{
+
+    /* schedule table */
+    table.schedule {{
+      width: 100%;
+      border-collapse: collapse;
+      font-family: -apple-system, system-ui, sans-serif;
+      font-size: 0.9rem;
+    }}
+    table.schedule td {{
+      padding: 0.65rem 0.5rem;
+      border-bottom: 1px solid var(--bg2);
+      vertical-align: top;
+    }}
+    table.schedule td.day {{
+      font-weight: 700;
+      color: var(--cyan);
+      width: 50px;
+      white-space: nowrap;
+    }}
+    table.schedule td.dim, .dim {{ color: var(--mute); }}
+    tr.has-gig td {{ color: var(--text); }}
+
+    /* venue cards */
+    .venue-card {{
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 0.75rem;
-      padding: 1rem 1.25rem;
+      border-radius: 12px;
+      padding: 1.2rem 1.4rem;
       margin-bottom: 0.75rem;
     }}
-    .venue h3 {{ font-size: 1.15rem; font-weight: 700; color: var(--text); }}
-    .venue .address {{ color: var(--dim); font-size: 0.9rem; }}
-    .venue .schedule {{ color: var(--pink); font-size: 0.9rem; margin-top: 0.25rem; }}
-    .venue .vibe {{ color: var(--mute); font-size: 0.85rem; margin-top: 0.5rem; }}
-    .empty {{ color: var(--mute); }}
-    footer {{ margin-top: 3rem; color: var(--mute); font-size: 0.8rem; }}
+    .venue-card h3 {{
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }}
+    .v-addr {{ color: var(--dim); font-size: 0.9rem; font-family: -apple-system, system-ui, sans-serif; }}
+    .v-sched {{ color: var(--pink); font-size: 0.88rem; margin-top: 0.35rem; font-family: -apple-system, system-ui, sans-serif; }}
+    .v-vibe {{ color: var(--mute); font-size: 0.85rem; margin-top: 0.5rem; }}
+    .v-links {{ margin-top: 0.5rem; font-size: 0.85rem; font-family: -apple-system, system-ui, sans-serif; }}
+    .v-links a {{ color: var(--cyan); text-decoration: none; }}
+    .v-links a:hover {{ text-decoration: underline; }}
+
+    /* services */
+    .service {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem 1.4rem;
+      margin-bottom: 0.75rem;
+    }}
+    .service h3 {{
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--yellow);
+      margin-bottom: 0.35rem;
+      font-family: -apple-system, system-ui, sans-serif;
+    }}
+    .service p {{
+      color: var(--dim);
+      font-size: 0.92rem;
+      font-family: -apple-system, system-ui, sans-serif;
+    }}
+
+    .empty {{ color: var(--mute); font-style: normal; padding: 1rem 0; }}
+
+    /* footer */
+    .site-footer {{
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+    }}
+    .site-footer p {{
+      color: var(--mute);
+      font-size: 0.82rem;
+      font-family: -apple-system, system-ui, sans-serif;
+      margin-bottom: 0.4rem;
+    }}
+    .site-footer .powered {{
+      color: var(--mute);
+      font-size: 0.78rem;
+    }}
+    .site-footer .powered a {{ color: var(--cyan); text-decoration: none; }}
+
+    @media (max-width: 480px) {{
+      .hero h1 {{ font-size: 1.8rem; }}
+      .hero .tagline {{ font-size: 1rem; }}
+    }}
   </style>
 </head>
 <body>
-  <header>
-    <h1>{html.escape(business_name)}</h1>
-    <p class="tagline">{html.escape(tagline)}</p>
-    <div class="links">
-      {insta_link}
-      {site_link}
+
+  <div class="site-header">
+    <div class="wrap">
+      <div class="brand"><a href="https://karaokespot.us">karaokespot.us</a></div>
+      <div class="brand-tag">karaoke hosts of brevard county</div>
     </div>
-  </header>
+  </div>
 
-  <div class="section-label">venues</div>
-  {venues_html}
+  <div class="wrap">
+    <div class="hero">
+      <h1>{biz_esc}</h1>
+      <p class="tagline">{bio}</p>
+      <div class="social-row">
+      {social_html}
+      </div>
+    </div>
 
-  <footer>
-    <p>{html.escape(business_name)} is a karaoke jockey operating in brevard county, florida. book through thehopper.</p>
-  </footer>
+    <div class="section">
+      <div class="section-title">Weekly Schedule</div>
+      <table class="schedule">
+      {schedule_html}
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Venues</div>
+      {venues_html}
+    </div>
+
+    <div class="section">
+      <div class="section-title">Services</div>
+      {services_html}
+    </div>
+
+    <div class="site-footer">
+      <p>{biz_esc} is a professional karaoke host operating in Brevard County, Florida.</p>
+      <p>{f'Contact: {html.escape(kj_phone_display)}' if kj_phone else ''}</p>
+      <p class="powered">Site powered by <a href="https://karaokespot.us">karaokespot.us</a> &middot; Book through <a href="https://thehopper.alchemycreativelounge.com">TheHopper</a></p>
+    </div>
+  </div>
+
 </body>
 </html>"""
 
