@@ -108,6 +108,8 @@ export interface KJ {
   stripe_onboarding_status: string;
   verified: boolean;
   created_at: string;
+  business_name?: string | null;
+  site_slug?: string | null;
 }
 
 export interface PhoneVerifyResponse {

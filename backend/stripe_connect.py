@@ -138,6 +138,8 @@ class ConnectManager:
         business_type: str = "individual",
         country: str = "US",
         metadata: dict[str, str] | None = None,
+        business_name: str | None = None,
+        business_url: str | None = None,
     ) -> ConnectAccount:
         """Create an Express connected account for a payee.
 
@@ -146,6 +148,12 @@ class ConnectManager:
             business_type: "individual" or "company".
             country: 2-letter country code.
             metadata: Optional metadata (e.g. venue_id, user_id) for tracking.
+            business_name: The KJ's business display name (for Stripe's
+                business_profile.name).
+            business_url: A public URL advertising the KJ's services
+                (for Stripe's business_profile.url). Stripe requires this
+                for Express onboarding — it's where they verify the business
+                is real.
 
         Returns:
             ConnectAccount with the initial status.
@@ -153,17 +161,29 @@ class ConnectManager:
         if self._test_mode:
             return self._mock_account(email)
 
-        acct = stripe.Account.create(
-            type="express",
-            email=email,
-            country=country,
-            business_type=business_type,
-            capabilities={
+        account_params: dict[str, Any] = {
+            "type": "express",
+            "email": email,
+            "country": country,
+            "business_type": business_type,
+            "capabilities": {
                 "card_payments": {"requested": True},
                 "transfers": {"requested": True},
             },
-            metadata=metadata or {},
-        )
+            "metadata": metadata or {},
+        }
+
+        # Stripe validates that business_profile.url is a live, publicly
+        # accessible page that shows the business name and what they sell.
+        if business_url:
+            account_params["business_profile"] = {}
+            if business_name:
+                account_params["business_profile"]["name"] = business_name
+            account_params["business_profile"]["url"] = business_url
+        elif business_name:
+            account_params["business_profile"] = {"name": business_name}
+
+        acct = stripe.Account.create(**account_params)
         return self._account_from_stripe(acct)
 
     def create_or_update_person(

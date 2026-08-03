@@ -11,8 +11,9 @@ import {
   View,
   Alert,
   Linking,
+  Pressable,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { api } from '../../src/api';
 import type { KJ, Venue, StripeStatusResponse } from '../../src/types';
@@ -54,84 +55,24 @@ export default function KJProfileScreen() {
 
   const handleStripeOnboard = async () => {
     if (!kj) return;
-    // Parse KJ's name from the DB record for prefill
-    const nameParts = (kj.name || '').split(' ');
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
+    // Navigate to the onboarding form screen
+    router.push(`/kj/${kjId}/onboard`);
+  };
 
-    Alert.prompt(
-      'Stripe Onboarding',
-      'Enter your email for Stripe:',
-      async (email) => {
-        if (!email) return;
-        Alert.prompt(
-          'Date of Birth',
-          'Enter DOB as MM/DD/YYYY (for Stripe verification):',
-          async (dobStr) => {
-            if (!dobStr) {
-              // No DOB -- proceed with email only, Stripe will ask
-              try {
-                const res = await api.kjStripeOnboard(kjId, email);
-                let url = res.onboarding_url;
-                if (url.startsWith('/')) {
-                  url = `https://thehopper.alchemycreativelounge.com${url}`;
-                }
-                await WebBrowser.openBrowserAsync(url);
-              } catch (e) {
-                Alert.alert('Error', e instanceof Error ? e.message : 'Stripe onboarding failed');
-              }
-              return;
-            }
-            const [month, day, year] = dobStr.split('/').map(Number);
-            Alert.prompt(
-              'Address',
-              'Enter your street address (city, state, ZIP will be asked next):',
-              async (address) => {
-                if (!address) return;
-                Alert.prompt(
-                  'City, State ZIP',
-                  'e.g. "Melbourne, FL 32901":',
-                  async (cityStateZip) => {
-                    const parts = cityStateZip?.split(',').map(s => s.trim()) || [];
-                    const city = parts[0] || '';
-                    const stateZip = (parts[1] || '').split(' ');
-                    const state = stateZip[0] || '';
-                    const postalCode = stateZip.slice(1).join(' ') || '';
-                    Alert.prompt(
-                      'Last 4 of SSN',
-                      'Enter last 4 digits of your SSN:',
-                      async (ssn4) => {
-                        try {
-                          const res = await api.kjStripeOnboard(kjId, email, {
-                            first_name: firstName,
-                            last_name: lastName,
-                            dob_day: day,
-                            dob_month: month,
-                            dob_year: year,
-                            address_line1: address,
-                            address_city: city,
-                            address_state: state,
-                            address_postal_code: postalCode,
-                            ssn_last_4: ssn4 || undefined,
-                          });
-                          let url = res.onboarding_url;
-                          if (url.startsWith('/')) {
-                            url = `https://thehopper.alchemycreativelounge.com${url}`;
-                          }
-                          await WebBrowser.openBrowserAsync(url);
-                        } catch (e) {
-                          Alert.alert('Error', e instanceof Error ? e.message : 'Stripe onboarding failed');
-                        }
-                      },
-                    );
-                  },
-                );
-              },
-            );
-          },
-        );
-      },
-    );
+  const handleViewDashboard = async () => {
+    if (!kj) return;
+    // For existing accounts, the backend generates a fresh link regardless
+    // of the email param (it's only used when creating a new account).
+    try {
+      const res = await api.kjStripeOnboard(kjId, 'existing@account');
+      let url = res.onboarding_url;
+      if (url.startsWith('/')) {
+        url = `https://thehopper.alchemycreativelounge.com${url}`;
+      }
+      await WebBrowser.openBrowserAsync(url);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to open Stripe');
+    }
   };
 
   if (loading) return <Loading label="Loading KJ profile..." />;
@@ -187,13 +128,18 @@ export default function KJProfileScreen() {
 
         <Button
           label={stripeReady ? 'View Stripe Dashboard' : 'Set up payments'}
-          onPress={handleStripeOnboard}
+          onPress={stripeReady ? handleViewDashboard : handleStripeOnboard}
           variant={stripeReady ? 'secondary' : 'primary'}
         />
       </Card>
 
       {/* Venues */}
-      <Text style={styles.sectionLabel}>Venues</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionLabel}>Venues</Text>
+        <Pressable onPress={() => router.push(`/kj/${kjId}/add-venue`)}>
+          <Text style={styles.addLink}>+ add</Text>
+        </Pressable>
+      </View>
       {venues.length === 0 ? (
         <EmptyState icon="📍" message="No venues linked yet" />
       ) : (
@@ -232,6 +178,18 @@ const styles = StyleSheet.create({
     color: Colors.textMute,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addLink: {
+    color: Colors.cyan,
+    fontSize: 14,
+    fontWeight: '700',
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },

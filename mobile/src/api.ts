@@ -139,7 +139,7 @@ export const api = {
 
   // --- KJ (Karaoke Jockey) ---
 
-  registerKJ: (data: { name: string; phone: string; bio?: string; instagram?: string; website?: string }) =>
+  registerKJ: (data: { name: string; phone: string; bio?: string; instagram?: string; website?: string; business_name?: string }) =>
     jsonFetch<KJ>(`${API_BASE}/kjs/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -160,6 +160,7 @@ export const api = {
   getKJVenues: (kj_id: number) => jsonFetch<Venue[]>(`${API_BASE}/kjs/${kj_id}/venues`),
 
   kjStripeOnboard: (kj_id: number, email: string, kyc?: {
+    business_name?: string;
     first_name?: string;
     last_name?: string;
     dob_day?: number;
@@ -174,6 +175,7 @@ export const api = {
     let url = `${API_BASE}/kjs/${kj_id}/stripe-onboard?email=${encodeURIComponent(email)}`;
     if (kyc) {
       const params = new URLSearchParams();
+      if (kyc.business_name) params.set('business_name', kyc.business_name);
       if (kyc.first_name) params.set('first_name', kyc.first_name);
       if (kyc.last_name) params.set('last_name', kyc.last_name);
       if (kyc.dob_day) params.set('dob_day', String(kyc.dob_day));
@@ -189,6 +191,27 @@ export const api = {
     }
     return jsonFetch<StripeOnboardResponse>(url, { method: 'POST' });
   },
+
+  kjAddVenue: (kj_id: number, data: {
+    name: string;
+    address: string;
+    city: string;
+    karaoke_nights?: string[];
+    start_time?: string;
+    end_time?: string;
+    phone?: string;
+    website?: string;
+    instagram?: string;
+    vibe?: string;
+  }) =>
+    jsonFetch<{ status: string; venue_id?: number; submission_id?: number; message: string }>(
+      `${API_BASE}/kjs/${kj_id}/venues`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+    ),
 
   kjStripeStatus: (kj_id: number) =>
     jsonFetch<StripeStatusResponse>(`${API_BASE}/kjs/${kj_id}/stripe-status`),

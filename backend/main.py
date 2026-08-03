@@ -34,7 +34,7 @@ from urllib.request import Request as UrllibRequest, urlopen
 import stripe
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -68,6 +68,9 @@ PUBLIC_APP_URL = os.environ.get(
 ).rstrip("/")
 
 stripe.api_key = STRIPE_SECRET_KEY
+
+# KJ business site domain — slug.karaokespot.us serves auto-generated pages
+KARAOKESPOT_DOMAIN = "karaokespot.us"
 
 # True when we are pointed at Stripe's live environment (real money).
 STRIPE_LIVE_MODE = STRIPE_SECRET_KEY.startswith("sk_live_")
@@ -302,6 +305,16 @@ def init_db() -> None:
         )
 
         # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
+        # Migration: add site_slug + business_name to kjs for auto-generated
+        # static websites (Stripe requires a business_profile.url).
+        # ------------------------------------------------------------------
+        kj_cols = {row["name"] for row in conn.execute("PRAGMA table_info(kjs)")}
+        if "site_slug" not in kj_cols:
+            conn.execute("ALTER TABLE kjs ADD COLUMN site_slug TEXT")
+        if "business_name" not in kj_cols:
+            conn.execute("ALTER TABLE kjs ADD COLUMN business_name TEXT")
+
         # Migration: add kj_id column to venues (links venue → KJ record)
         # ------------------------------------------------------------------
         vcols = {row["name"] for row in conn.execute("PRAGMA table_info(venues)")}
@@ -394,6 +407,86 @@ def haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float
     return 2 * R * math.asin(math.sqrt(a))
 
 
+def _normalize_venue_name(name: str) -> str:
+    """Normalize a venue name for fuzzy matching.
+
+    Lowercase, strip common suffixes (the, bar, grill, etc.),
+    collapse whitespace and punctuation.
+    """
+    import re
+    n = name.lower().strip()
+    # Remove common business suffixes
+    for suffix in [" the ", " bar ", " grill ", " pub ", " lounge ",
+                   " restaurant ", " & grill", " bar and grill",
+                   " sports bar", " tavern", " taproom"]:
+        n = n.replace(suffix, " ")
+    # Remove punctuation
+    n = re.sub(r"[^a-z0-9\s]", " ", n)
+    # Collapse whitespace
+    n = re.sub(r"\s+", " ", n).strip()
+    # Remove "the" prefix
+    if n.startswith("the "):
+        n = n[4:]
+    return n
+
+
+def _check_duplicate_venue(
+    conn: sqlite3.Connection,
+    name: str,
+    address: str,
+    city: str,
+    lat: float | None = None,
+    lng: float | None = None,
+) -> dict | None:
+    """Check if a venue already exists (fuzzy match by name + location).
+
+    Returns the existing venue dict if a duplicate is found, None otherwise.
+    Uses name similarity + geographic proximity (within ~500ft / 0.1 miles)
+    or exact address match.
+    """
+    norm_name = _normalize_venue_name(name)
+    if not norm_name:
+        return None
+
+    # Check existing venues
+    venues = conn.execute("SELECT * FROM venues").fetchall()
+    for v in venues:
+        existing_norm = _normalize_venue_name(v["name"])
+        # Exact normalized name match
+        if existing_norm == norm_name:
+            # Same city or same address
+            if (city and v["city"].lower() == city.lower()) or \
+               (address and address.lower().strip() in v["address"].lower()):
+                return venue_row_to_dict(v)
+
+        # Geographic proximity check (within ~500ft)
+        if lat is not None and lng is not None and v["lat"] and v["lng"]:
+            dist = haversine_miles(lat, lng, v["lat"], v["lng"])
+            if dist < 0.1:  # within ~0.1 miles (~528ft)
+                # Name similarity — check if one name contains the other
+                if norm_name in existing_norm or existing_norm in norm_name:
+                    return venue_row_to_dict(v)
+
+    # Also check pending submissions to flag duplicates early
+    pending = conn.execute(
+        "SELECT * FROM venue_submissions WHERE status='pending'"
+    ).fetchall()
+    for p in pending:
+        existing_norm = _normalize_venue_name(p["name"])
+        if existing_norm == norm_name:
+            if (city and p["city"].lower() == city.lower()) or \
+               (address and address.lower().strip() in p["address"].lower()):
+                return {
+                    "id": p["id"],
+                    "name": p["name"],
+                    "address": p["address"],
+                    "city": p["city"],
+                    "is_pending": True,
+                }
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # SMS helper (Twilio REST API — no SDK needed)
 # ---------------------------------------------------------------------------
@@ -483,6 +576,29 @@ def normalize_phone(phone: str) -> str:
 def generate_code() -> str:
     """Generate a 6-digit verification code."""
     return "".join(random.choices(string.digits, k=6))
+
+
+def slugify(text: str) -> str:
+    """Convert text to a URL-safe slug."""
+    import re
+    import unicodedata
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode()
+    text = re.sub(r"[^a-zA-Z0-9]+", "-", text).strip("-").lower()
+    return text or "kj"
+
+
+def unique_slug(conn: sqlite3.Connection, base: str) -> str:
+    """Find a unique site_slug not already in use."""
+    base = slugify(base)
+    slug = base
+    suffix = 2
+    while conn.execute(
+        "SELECT id FROM kjs WHERE site_slug=?", (slug,)
+    ).fetchone():
+        slug = f"{base}-{suffix}"
+        suffix += 1
+    return slug
 
 
 # ---------------------------------------------------------------------------
@@ -705,6 +821,7 @@ class KJRegisterRequest(BaseModel):
     instagram: str | None = None
     website: str | None = None
     photo_url: str | None = None
+    business_name: str | None = None  # operating name for Stripe (defaults to name)
 
 
 class KJOut(BaseModel):
@@ -718,6 +835,8 @@ class KJOut(BaseModel):
     stripe_onboarding_status: str = "none"
     verified: bool = False
     created_at: str
+    business_name: str | None = None
+    site_slug: str | None = None
 
 
 class KJLinkVenueRequest(BaseModel):
@@ -2068,6 +2187,9 @@ def submit_venue(req: VenueSubmissionRequest):
 
     If is_kj=True, the submitter is claiming to be the KJ. They'll need
     to complete phone verification + KJ onboarding after submission.
+
+    Checks for duplicate venues using fuzzy name matching + geographic
+    proximity before accepting the submission.
     """
     if not req.name.strip() or not req.address.strip() or not req.city.strip():
         raise HTTPException(status_code=400, detail="Name, address, and city are required")
@@ -2088,6 +2210,23 @@ def submit_venue(req: VenueSubmissionRequest):
                 lng = float(results[0]["lon"])
     except Exception:
         pass  # Geocoding is optional — admin can fix later
+
+    # Canonicalization: check for duplicates before accepting
+    with db() as conn:
+        dupe = _check_duplicate_venue(conn, req.name, req.address, req.city, lat, lng)
+    if dupe:
+        is_pending = dupe.get("is_pending", False)
+        if is_pending:
+            return VenueSubmissionResponse(
+                id=dupe["id"],
+                status="duplicate_pending",
+                message=f"A submission for '{dupe['name']}' is already pending review.",
+            )
+        return VenueSubmissionResponse(
+            id=dupe["id"],
+            status="duplicate",
+            message=f"'{dupe['name']}' already exists in {dupe['city']}. Use that venue instead.",
+        )
 
     submitter_phone = normalize_phone(req.submitter_phone) if req.submitter_phone else None
 
@@ -2248,6 +2387,20 @@ def verify_phone(req: PhoneVerifyRequest):
 # ---------------------------------------------------------------------------
 
 
+def _kj_row_to_out(row: sqlite3.Row) -> KJOut:
+    """Build a KJOut from a db row, handling optional columns safely."""
+    keys = set(row.keys())
+    stripe_status = row["stripe_onboarding_status"] if "stripe_onboarding_status" in keys else "none"
+    return KJOut(
+        id=row["id"], name=row["name"], phone=row["phone"], bio=row["bio"],
+        photo_url=row["photo_url"], instagram=row["instagram"], website=row["website"],
+        stripe_onboarding_status=stripe_status or "none",
+        verified=bool(row["verified"]), created_at=row["created_at"],
+        business_name=row["business_name"] if "business_name" in keys else None,
+        site_slug=row["site_slug"] if "site_slug" in keys else None,
+    )
+
+
 @app.post(f"{API_PREFIX}/kjs/register", response_model=KJOut)
 def register_kj(req: KJRegisterRequest):
     """Register a new KJ or update an existing one by phone number."""
@@ -2256,22 +2409,17 @@ def register_kj(req: KJRegisterRequest):
         existing = conn.execute("SELECT * FROM kjs WHERE phone=?", (phone,)).fetchone()
         if existing:
             conn.execute(
-                "UPDATE kjs SET name=?, bio=?, instagram=?, website=?, photo_url=? WHERE id=?",
-                (req.name.strip(), req.bio, req.instagram, req.website, req.photo_url, existing["id"]),
+                "UPDATE kjs SET name=?, bio=?, instagram=?, website=?, photo_url=?, business_name=COALESCE(?, business_name) WHERE id=?",
+                (req.name.strip(), req.bio, req.instagram, req.website, req.photo_url, req.business_name, existing["id"]),
             )
             row = conn.execute("SELECT * FROM kjs WHERE id=?", (existing["id"],)).fetchone()
         else:
             cur = conn.execute(
-                "INSERT INTO kjs (name, phone, bio, instagram, website, photo_url) VALUES (?,?,?,?,?,?)",
-                (req.name.strip(), phone, req.bio, req.instagram, req.website, req.photo_url),
+                "INSERT INTO kjs (name, phone, bio, instagram, website, photo_url, business_name) VALUES (?,?,?,?,?,?,?)",
+                (req.name.strip(), phone, req.bio, req.instagram, req.website, req.photo_url, req.business_name),
             )
             row = conn.execute("SELECT * FROM kjs WHERE id=?", (cur.lastrowid,)).fetchone()
-    return KJOut(
-        id=row["id"], name=row["name"], phone=row["phone"], bio=row["bio"],
-        photo_url=row["photo_url"], instagram=row["instagram"], website=row["website"],
-        stripe_onboarding_status=row["stripe_onboarding_status"],
-        verified=bool(row["verified"]), created_at=row["created_at"],
-    )
+    return _kj_row_to_out(row)
 
 
 @app.get(f"{API_PREFIX}/kjs/{{kj_id}}", response_model=KJOut)
@@ -2280,12 +2428,7 @@ def get_kj(kj_id: int):
         row = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="KJ not found")
-    return KJOut(
-        id=row["id"], name=row["name"], phone=row["phone"], bio=row["bio"],
-        photo_url=row["photo_url"], instagram=row["instagram"], website=row["website"],
-        stripe_onboarding_status=row["stripe_onboarding_status"],
-        verified=bool(row["verified"]), created_at=row["created_at"],
-    )
+    return _kj_row_to_out(row)
 
 
 @app.get(f"{API_PREFIX}/kjs", response_model=list[KJOut])
@@ -2293,15 +2436,7 @@ def list_kjs():
     """List all KJs."""
     with db() as conn:
         rows = conn.execute("SELECT * FROM kjs ORDER BY created_at DESC").fetchall()
-    return [
-        KJOut(
-            id=r["id"], name=r["name"], phone=r["phone"], bio=r["bio"],
-            photo_url=r["photo_url"], instagram=r["instagram"], website=r["website"],
-            stripe_onboarding_status=r["stripe_onboarding_status"],
-            verified=bool(r["verified"]), created_at=r["created_at"],
-        )
-        for r in rows
-    ]
+    return [_kj_row_to_out(r) for r in rows]
 
 
 @app.post(f"{API_PREFIX}/kjs/link-venue")
@@ -2326,10 +2461,120 @@ def get_kj_venues(kj_id: int):
     return [venue_row_to_dict(r) for r in rows]
 
 
+class KJAddVenueRequest(BaseModel):
+    """KJ adds a venue to their profile — either claiming an existing
+    venue or submitting a new one."""
+    name: str
+    address: str
+    city: str
+    karaoke_nights: list[str] = []
+    start_time: str = "20:00"
+    end_time: str = "00:00"
+    phone: str | None = None
+    website: str | None = None
+    instagram: str | None = None
+    vibe: str | None = None
+
+
+class KJAddVenueResponse(BaseModel):
+    status: str  # "linked" (claimed existing) | "submitted" (new, pending) | "duplicate"
+    venue_id: int | None = None
+    submission_id: int | None = None
+    message: str
+
+
+@app.post(f"{API_PREFIX}/kjs/{{kj_id}}/venues", response_model=KJAddVenueResponse)
+def kj_add_venue(kj_id: int, req: KJAddVenueRequest):
+    """Add a venue to a KJ's profile.
+
+    If the venue already exists (fuzzy match), the KJ is linked to it
+    instead of creating a duplicate. If it's genuinely new, a venue
+    submission is created (pending admin approval) with the KJ pre-linked.
+    """
+    with db() as conn:
+        kj = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
+    if not kj:
+        raise HTTPException(status_code=404, detail="KJ not found")
+
+    if not req.name.strip() or not req.address.strip() or not req.city.strip():
+        raise HTTPException(status_code=400, detail="Name, address, and city are required")
+
+    # Geocode
+    lat, lng = None, None
+    try:
+        import urllib.parse as up
+        geocode_url = f"https://nominatim.openstreetmap.org/search?q={up.quote(req.address + ', ' + req.city + ', FL')}&format=json&limit=1"
+        geo_req = UrllibRequest(geocode_url)
+        geo_req.add_header("User-Agent", "TheHopper/1.0")
+        with urlopen(geo_req, timeout=10) as resp:
+            results = json.loads(resp.read())
+            if results:
+                lat = float(results[0]["lat"])
+                lng = float(results[0]["lon"])
+    except Exception:
+        pass
+
+    # Canonicalization check
+    with db() as conn:
+        dupe = _check_duplicate_venue(conn, req.name, req.address, req.city, lat, lng)
+
+    if dupe:
+        venue_id = dupe.get("id")
+        if venue_id and not dupe.get("is_pending"):
+            # Link the KJ to the existing venue
+            with db() as conn:
+                existing_kj = conn.execute(
+                    "SELECT kj_id FROM venues WHERE id=?", (venue_id,)
+                ).fetchone()
+                if existing_kj and existing_kj["kj_id"]:
+                    return KJAddVenueResponse(
+                        status="duplicate",
+                        venue_id=venue_id,
+                        message=f"'{dupe['name']}' already has a KJ assigned.",
+                    )
+                conn.execute(
+                    "UPDATE venues SET kj_id=?, kj_name=? WHERE id=?",
+                    (kj_id, kj["name"], venue_id),
+                )
+            return KJAddVenueResponse(
+                status="linked",
+                venue_id=venue_id,
+                message=f"You're now linked to '{dupe['name']}'.",
+            )
+        return KJAddVenueResponse(
+            status="duplicate",
+            message=f"A submission for '{dupe['name']}' is already pending.",
+        )
+
+    # New venue — create a submission with KJ pre-linked
+    nights = ",".join(req.karaoke_nights) if req.karaoke_nights else ""
+    with db() as conn:
+        cur = conn.execute(
+            """INSERT INTO venue_submissions
+               (name, address, city, lat, lng, karaoke_nights, start_time, end_time,
+                kj_name, phone, website, instagram, vibe, is_kj, submitter_phone, status)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending')""",
+            (
+                req.name.strip(), req.address.strip(), req.city.strip(),
+                lat, lng, nights, req.start_time, req.end_time,
+                kj["name"], req.phone, req.website, req.instagram, req.vibe,
+                1, kj["phone"],
+            ),
+        )
+        submission_id = cur.lastrowid
+
+    return KJAddVenueResponse(
+        status="submitted",
+        submission_id=submission_id,
+        message=f"'{req.name}' submitted for review. We'll text you when it's approved.",
+    )
+
+
 @app.post(f"{API_PREFIX}/kjs/{{kj_id}}/stripe-onboard")
 def kj_stripe_onboard(
     kj_id: int,
     email: str = Query(..., description="KJ email for Stripe"),
+    business_name: str | None = Query(None, description="Business name for Stripe (defaults to KJ name)"),
     first_name: str | None = Query(None, description="KJ first name for KYC prefill"),
     last_name: str | None = Query(None, description="KJ last name for KYC prefill"),
     dob_day: int | None = Query(None, description="Date of birth day"),
@@ -2346,6 +2591,11 @@ def kj_stripe_onboard(
     Accepts optional KYC fields for prefilling the Stripe Express
     onboarding form. The KJ's name and phone from the kjs table
     are used automatically if available.
+
+    If business_name is provided (or the KJ already has one), a
+    site_slug is generated and a public business page is served at
+    /kj-sites/{slug}. That URL is passed to Stripe as
+    business_profile.url, which Stripe requires to verify the business.
     """
     with db() as conn:
         kj = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
@@ -2361,9 +2611,47 @@ def kj_stripe_onboard(
             raise HTTPException(status_code=502, detail=f"Stripe error: {e}")
         return {"onboarding_url": onboarding_url, "account_id": existing_acct}
 
+    # Determine the business name and generate a site slug if needed.
+    # If the KJ already has their own website, use that as the Stripe
+    # business_profile.url. Only auto-generate a kj-site for KJs who
+    # don't have one.
+    biz_name = business_name or kj["business_name"] or kj["name"]
+    kj_website = kj["website"] if kj["website"] else None
+
+    if not kj_website:
+        # No existing website — auto-generate one
+        with db() as conn:
+            if not kj["site_slug"]:
+                slug = unique_slug(conn, biz_name)
+                conn.execute(
+                    "UPDATE kjs SET site_slug=?, business_name=? WHERE id=?",
+                    (slug, biz_name, kj_id),
+                )
+            elif business_name and business_name != kj["business_name"]:
+                conn.execute(
+                    "UPDATE kjs SET business_name=? WHERE id=?",
+                    (business_name, kj_id),
+                )
+            # Re-read to get the current slug
+            kj = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
+
+        site_slug = kj["site_slug"]
+        business_url = f"https://{site_slug}.{KARAOKESPOT_DOMAIN}"
+    else:
+        business_url = kj_website
+        # Still save the business_name if provided
+        if business_name and business_name != kj["business_name"]:
+            with db() as conn:
+                conn.execute(
+                    "UPDATE kjs SET business_name=? WHERE id=?",
+                    (business_name, kj_id),
+                )
+
     try:
         account = connect.create_connected_account(
             email=email,
+            business_name=biz_name,
+            business_url=business_url,
             metadata={"kj_id": str(kj_id), "kj_name": kj["name"]},
         )
     except Exception as e:
@@ -2445,6 +2733,150 @@ def kj_stripe_status(kj_id: int):
 
 
 # ---------------------------------------------------------------------------
+# API: KJ public site (auto-generated static page for Stripe business_profile)
+# ---------------------------------------------------------------------------
+
+def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
+    """Render a self-contained HTML page for a KJ's business.
+
+    Stripe requires a public URL that advertises the products/services
+    offered by the connected account. This page shows the KJ's name, bio,
+    venues, and karaoke schedule — enough for Stripe's verification.
+    """
+    import html
+
+    business_name = kj["business_name"] or kj["name"]
+    tagline = "Karaoke Jockey"
+    if kj["bio"]:
+        tagline = kj["bio"]
+
+    insta_link = ""
+    if kj["instagram"]:
+        insta = html.escape(kj["instagram"])
+        insta_link = f'<a href="https://instagram.com/{insta}" target="_blank" rel="noopener">instagram</a>'
+    site_link = ""
+    if kj["website"]:
+        site = html.escape(kj["website"])
+        site_link = f'<a href="{site}" target="_blank" rel="noopener">website</a>'
+
+    venue_cards = []
+    for v in venues:
+        nights_raw = v["karaoke_nights"] or ""
+        nights_list = [n.strip() for n in nights_raw.split(",") if n.strip()]
+        nights_display = ", ".join(nights_list) if nights_list else "schedule varies"
+        venue_cards.append(f"""
+        <div class="venue">
+          <h3>{html.escape(v["name"])}</h3>
+          <p class="address">{html.escape(v["address"])}, {html.escape(v["city"])}</p>
+          <p class="schedule">{html.escape(nights_display)} &middot; {html.escape(v["start_time"])}&ndash;{html.escape(v["end_time"])}</p>
+          {f'<p class="vibe">{html.escape(v["vibe"])}</p>' if v["vibe"] else ''}
+        </div>""")
+
+    venues_html = "\n".join(venue_cards) if venue_cards else '<p class="empty">No venues listed yet.</p>'
+
+    # serif, lowercase, no italics, clean — matching Roscoe's style prefs
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(business_name)} &mdash; karaoke</title>
+  <style>
+    :root {{
+      --bg: #1a1a2e;
+      --panel: #262640;
+      --border: #3a3a55;
+      --text: #e8e4f0;
+      --dim: #a09ab8;
+      --mute: #6a6585;
+      --pink: #c4568d;
+      --cyan: #5fb8a8;
+    }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      font-family: georgia, "times new roman", serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }}
+    header {{ margin-bottom: 2rem; }}
+    h1 {{ font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }}
+    .tagline {{ color: var(--dim); font-size: 1.1rem; }}
+    .links {{ margin-top: 0.75rem; display: flex; gap: 1rem; flex-wrap: wrap; }}
+    .links a {{ color: var(--cyan); text-decoration: none; font-size: 0.95rem; }}
+    .links a:hover {{ text-decoration: underline; }}
+    .section-label {{
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--mute);
+      text-transform: uppercase;
+      letter-spacing: 0.05rem;
+      margin: 2rem 0 0.75rem;
+    }}
+    .venue {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+    }}
+    .venue h3 {{ font-size: 1.15rem; font-weight: 700; color: var(--text); }}
+    .venue .address {{ color: var(--dim); font-size: 0.9rem; }}
+    .venue .schedule {{ color: var(--pink); font-size: 0.9rem; margin-top: 0.25rem; }}
+    .venue .vibe {{ color: var(--mute); font-size: 0.85rem; margin-top: 0.5rem; }}
+    .empty {{ color: var(--mute); }}
+    footer {{ margin-top: 3rem; color: var(--mute); font-size: 0.8rem; }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{html.escape(business_name)}</h1>
+    <p class="tagline">{html.escape(tagline)}</p>
+    <div class="links">
+      {insta_link}
+      {site_link}
+    </div>
+  </header>
+
+  <div class="section-label">venues</div>
+  {venues_html}
+
+  <footer>
+    <p>{html.escape(business_name)} is a karaoke jockey operating in brevard county, florida. book through thehopper.</p>
+  </footer>
+</body>
+</html>"""
+
+
+@app.get("/kj-sites/{slug}")
+def kj_site(slug: str):
+    """Serve an auto-generated HTML page for a KJ's business.
+
+    This is the public URL that Stripe's business_profile.url points to.
+    It shows the KJ's name, bio, venues, and schedule — enough for Stripe
+    to verify the business is real.
+    """
+    with db() as conn:
+        kj = conn.execute(
+            "SELECT * FROM kjs WHERE site_slug=?", (slug,)
+        ).fetchone()
+        if not kj:
+            raise HTTPException(status_code=404, detail="KJ site not found")
+        venues = conn.execute(
+            """SELECT v.* FROM venues v
+               JOIN kjs k ON v.kj_id = k.id
+               WHERE k.site_slug=?""",
+            (slug,),
+        ).fetchall()
+
+    html_content = _kj_site_html(kj, venues)
+    return HTMLResponse(content=html_content, media_type="text/html")
+
+
+# ---------------------------------------------------------------------------
 # API: Device registration (push tokens)
 # ---------------------------------------------------------------------------
 
@@ -2477,6 +2909,48 @@ def register_device(req: DeviceRegisterRequest):
 
 
 ADMIN_TOKEN = os.environ.get("THEHOPPER_ADMIN_TOKEN", "")
+
+
+# ---------------------------------------------------------------------------
+# Subdomain routing — slug.karaokespot.us serves the KJ's business page
+# ---------------------------------------------------------------------------
+
+
+@app.middleware("http")
+async def kj_subdomain_middleware(request: Request, call_next):
+    """Intercept requests to *.karaokespot.us and serve KJ pages by slug.
+
+    For slug.karaokespot.us, look up the KJ by site_slug and return their
+    auto-generated business page. API paths (slug.karaokespot.us/api/...)
+    fall through to the normal app.
+    """
+    host = request.url.hostname or ""
+    if (
+        host.endswith(f".{KARAOKESPOT_DOMAIN}")
+        and host != f"www.{KARAOKESPOT_DOMAIN}"
+        and not request.url.path.startswith("/api")
+    ):
+        slug = host[: -len(f".{KARAOKESPOT_DOMAIN}")].lower()
+        if slug:
+            kj = None
+            venues = []
+            with db() as conn:
+                kj = conn.execute(
+                    "SELECT * FROM kjs WHERE site_slug=?", (slug,)
+                ).fetchone()
+                if kj:
+                    venues = conn.execute(
+                        """SELECT v.* FROM venues v
+                           JOIN kjs k ON v.kj_id = k.id
+                           WHERE k.site_slug=?""",
+                        (slug,),
+                    ).fetchall()
+            if kj:
+                return HTMLResponse(
+                    content=_kj_site_html(kj, venues),
+                    media_type="text/html",
+                )
+    return await call_next(request)
 
 
 # ---------------------------------------------------------------------------
