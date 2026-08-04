@@ -35,6 +35,7 @@ export default function EventScreen() {
   const [showPay, setShowPay] = useState(false);
   const [showTip, setShowTip] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
+  const [showLineup, setShowLineup] = useState(false);
 
   useEffect(() => {
     api.getConfig().then(setConfig).catch(() => setConfig(null));
@@ -128,6 +129,14 @@ export default function EventScreen() {
           {/* Action buttons anchored at bottom */}
           <View style={styles.actionBar}>
             <Pressable
+              onPress={() => setShowLineup(true)}
+              style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnLineup, pressed && styles.subtleBtnPressed]}
+            >
+              <Text style={styles.subtleBtnText}>
+                🎤 Get In Line
+              </Text>
+            </Pressable>
+            <Pressable
               onPress={() => setShowPay(true)}
               style={({ pressed }) => [styles.subtleBtn, pressed && styles.subtleBtnPressed]}
             >
@@ -183,6 +192,11 @@ export default function EventScreen() {
         venue={venue}
         visible={showMessage}
         onClose={() => setShowMessage(false)}
+      />
+      <GetInLineModal
+        venue={venue}
+        visible={showLineup}
+        onClose={() => setShowLineup(false)}
       />
     </KeyboardAvoidingView>
   );
@@ -785,6 +799,136 @@ function MessageKJModal({
 
 
 // ---------------------------------------------------------------------------
+// Get In Line Modal — sends a queue request message to the KJ
+// ---------------------------------------------------------------------------
+
+function GetInLineModal({
+  venue,
+  visible,
+  onClose,
+}: {
+  venue: Venue;
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const [prefs, updatePrefs] = usePrefsContext();
+  const [singer, setSinger] = useState('');
+  const [phone, setPhone] = useState('');
+  const [song, setSong] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setSinger(prefs.singer_name || '');
+      setPhone(prefs.singer_phone || '');
+      setSong('');
+      setSubmitting(false);
+      setError(null);
+      setSent(false);
+    }
+  }, [visible]);
+
+  const submit = async () => {
+    if (!song.trim()) {
+      setError('Please enter a song request');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const nameVal = singer.trim() || 'Anonymous Singer';
+      const phoneVal = phone.trim();
+      await api.sendKJMessage(
+        venue.id,
+        nameVal,
+        `QUEUE: I'd like to sing!`,
+        song.trim(),
+        phoneVal || undefined,
+      );
+      updatePrefs((p) => ({ ...p, singer_name: nameVal !== 'Anonymous Singer' ? nameVal : p.singer_name, singer_phone: phoneVal || p.singer_phone }));
+      setSent(true);
+      setTimeout(onClose, 1500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not send request');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={styles.modalClose} onPress={onClose} hitSlop={12}>
+            <Text style={styles.modalCloseText}>×</Text>
+          </Pressable>
+          <Text style={styles.modalTitle}>🎤 Get In Line</Text>
+          <Text style={styles.modalSub}>{venue.name} · KJ: {venue.kj_name || 'TBA'}</Text>
+
+          {sent ? (
+            <Text style={styles.successText}>
+              Request sent! {venue.kj_name || 'The KJ'} will see your song and fit you into the rotation.
+            </Text>
+          ) : (
+            <>
+              <Text style={styles.fieldLabel}>Your name (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Anonymous Singer"
+                placeholderTextColor={Colors.textMute}
+                value={singer}
+                onChangeText={setSinger}
+                maxLength={60}
+              />
+
+              <Text style={styles.fieldLabel}>Your phone (optional — lets the KJ reply)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="(321) 555-0123"
+                placeholderTextColor={Colors.textMute}
+                value={phone}
+                onChangeText={setPhone}
+                maxLength={20}
+                keyboardType="phone-pad"
+              />
+
+              <Text style={styles.fieldLabel}>Song request</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Don't Stop Believin' — Journey"
+                placeholderTextColor={Colors.textMute}
+                value={song}
+                onChangeText={setSong}
+                maxLength={200}
+              />
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                onPress={submit}
+                disabled={submitting}
+                style={({ pressed }) => [
+                  styles.submitBtn,
+                  submitting && styles.submitBtnDisabled,
+                  pressed && !submitting && styles.submitBtnPressed,
+                ]}
+              >
+                <Text style={styles.submitBtnText}>
+                  {submitting ? 'Sending...' : 'Send to KJ'}
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
 
@@ -849,6 +993,10 @@ const styles = StyleSheet.create({
   subtleBtnTip: {
     borderColor: 'rgba(212, 195, 114, 0.3)',
     backgroundColor: 'rgba(212, 195, 114, 0.08)',
+  },
+  subtleBtnLineup: {
+    borderColor: 'rgba(95, 184, 168, 0.4)',
+    backgroundColor: 'rgba(95, 184, 168, 0.08)',
   },
   subtleBtnPressed: {
     opacity: 0.7,

@@ -1194,9 +1194,10 @@ def send_kj_message(venue_id: int, req: KJMessageRequest):
             kj_name = venue["kj_name"] or "the KJ"
             song_part = f" (song: {req.song_request})" if req.song_request else ""
             reply_part = f" Reply: {normalized_phone}" if normalized_phone else ""
+            msg_text = req.message.strip()[:500]
             sms_body = (
                 f"New message from {singer_name} at {venue['name']}{song_part}:\n"
-                f"{req.message.strip()[:500]}{reply_part}"
+                f"{msg_text}{reply_part}"
             )
             send_sms(normalize_phone(kj_phone), sms_body)
 
