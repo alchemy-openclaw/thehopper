@@ -391,6 +391,24 @@ def init_db() -> None:
                 """
             )
 
+        # Migration: add singer_phone to kj_messages
+        kj_msg_cols = {row["name"] for row in conn.execute("PRAGMA table_info(kj_messages)")}
+        if "singer_phone" not in kj_msg_cols:
+            conn.execute("ALTER TABLE kj_messages ADD COLUMN singer_phone TEXT")
+
+        # Patrons table — tiny profiles so KJs can reply
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS patrons (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                phone           TEXT NOT NULL UNIQUE,
+                name            TEXT,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_patrons_phone ON patrons(phone);
+            """
+        )
+
 
 # ---------------------------------------------------------------------------
 # Geolocation helpers
@@ -747,10 +765,11 @@ class PaymentResponse(BaseModel):
 class KJMessageRequest(BaseModel):
     """A singer's message to a venue's KJ (karaoke host).
 
-    Stored in the `kj_messages` table. In a future iteration the KJ would be
-    notified by email/SMS; for now we just persist it.
+    Stored in the `kj_messages` table. If the KJ has a phone number and
+    Twilio is configured, the message is forwarded via SMS.
     """
     singer_name: str = "Anonymous Singer"
+    singer_phone: str = ""
     message: str
     song_request: str = ""
 
@@ -759,6 +778,7 @@ class KJMessageResponse(BaseModel):
     id: int
     venue_id: int
     singer_name: str
+    singer_phone: str | None
     message: str
     song_request: str | None
     created_at: str
@@ -1105,26 +1125,39 @@ def get_venue(venue_id: int):
 def send_kj_message(venue_id: int, req: KJMessageRequest):
     """Store a message from a singer to a venue's KJ (karaoke host).
 
-    No notification is sent yet — the message is just persisted in the
-    `kj_messages` table. A future email/SMS notifier will pick these up.
+    If the KJ has a phone number and Twilio is configured, the message is
+    forwarded via SMS so the KJ can respond directly to the patron.
     """
     if not req.message or not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+    singer_name = (req.singer_name or "Anonymous Singer").strip()[:120]
+    singer_phone = req.singer_phone.strip() if req.singer_phone else ""
+    normalized_phone = normalize_phone(singer_phone) if singer_phone else ""
+
     with db() as conn:
         venue = conn.execute(
-            "SELECT id, kj_name FROM venues WHERE id = ?", (venue_id,)
+            "SELECT id, kj_name, phone FROM venues WHERE id = ?", (venue_id,)
         ).fetchone()
         if not venue:
             raise HTTPException(status_code=404, detail="Venue not found")
 
+        # Upsert patron profile if phone provided
+        if normalized_phone:
+            conn.execute(
+                """INSERT INTO patrons (phone, name) VALUES (?, ?)
+                   ON CONFLICT(phone) DO UPDATE SET name=excluded.name""",
+                (normalized_phone, singer_name),
+            )
+
         cur = conn.execute(
             """INSERT INTO kj_messages
-               (venue_id, singer_name, message, song_request)
-               VALUES (?,?,?,?)""",
+               (venue_id, singer_name, singer_phone, message, song_request)
+               VALUES (?,?,?,?,?)""",
             (
                 venue_id,
-                (req.singer_name or "Anonymous Singer").strip()[:120],
+                singer_name,
+                normalized_phone or None,
                 req.message.strip()[:2000],
                 (req.song_request or "").strip()[:200] or None,
             ),
@@ -1134,10 +1167,23 @@ def send_kj_message(venue_id: int, req: KJMessageRequest):
             "SELECT * FROM kj_messages WHERE id = ?", (msg_id,)
         ).fetchone()
 
+        # Forward via SMS to KJ if Twilio is configured and KJ has a phone
+        kj_phone = venue["phone"] or ""
+        if kj_phone and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER:
+            kj_name = venue["kj_name"] or "the KJ"
+            song_part = f" (song: {req.song_request})" if req.song_request else ""
+            reply_part = f" Reply: {normalized_phone}" if normalized_phone else ""
+            sms_body = (
+                f"New message from {singer_name} at your venue{song_part}:\n"
+                f"{req.message.strip()[:500]}{reply_part}"
+            )
+            send_sms(normalize_phone(kj_phone), sms_body)
+
     return KJMessageResponse(
         id=row["id"],
         venue_id=row["venue_id"],
         singer_name=row["singer_name"],
+        singer_phone=row["singer_phone"],
         message=row["message"],
         song_request=row["song_request"],
         created_at=row["created_at"],

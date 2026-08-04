@@ -650,6 +650,7 @@ function MessageKJModal({
   onClose: () => void;
 }) {
   const [singer, setSinger] = useState('');
+  const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   const [song, setSong] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -659,6 +660,7 @@ function MessageKJModal({
   useEffect(() => {
     if (visible) {
       setSinger('');
+      setPhone('');
       setMessage('');
       setSong('');
       setSubmitting(false);
@@ -680,6 +682,7 @@ function MessageKJModal({
         singer.trim() || 'Anonymous Singer',
         message.trim(),
         song.trim() || undefined,
+        phone.trim() || undefined,
       );
       setSent(true);
       setTimeout(onClose, 1500);
@@ -712,6 +715,17 @@ function MessageKJModal({
                 value={singer}
                 onChangeText={setSinger}
                 maxLength={60}
+              />
+
+              <Text style={styles.fieldLabel}>Your phone (optional — lets the KJ reply)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="(321) 555-0123"
+                placeholderTextColor={Colors.textMute}
+                value={phone}
+                onChangeText={setPhone}
+                maxLength={20}
+                keyboardType="phone-pad"
               />
 
               <Text style={styles.fieldLabel}>Song request (optional)</Text>
