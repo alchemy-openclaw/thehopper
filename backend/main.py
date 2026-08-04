@@ -2820,46 +2820,47 @@ def connect_refresh_page():
 def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     """Render a self-contained HTML page for a KJ's business.
 
-    This is the public-facing page Stripe uses to verify the connected
-    account is a real business. It includes:
-      - branded karaokespot.us header
-      - KJ business name, bio, contact info, social links
-      - weekly schedule table organized by day
-      - venue cards with full details (address, hours, vibe)
-      - services overview
-      - footer with business info
+    Layout: header > hero (left-justified) > schedule+map (two-col) >
+    venue details > services > footer. Includes Google Maps embed
+    with venue markers and click-to-zoom interactivity.
     """
-    import html
+    import html, json as _json
+
+    GOOGLE_MAPS_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 
     biz = kj["business_name"] or kj["name"]
     biz_esc = html.escape(biz)
-    bio = html.escape(kj["bio"] or "Karaoke host serving Brevard County, Florida. Live karaoke nights, song suggestions, and premium slot bookings through TheHopper.")
+    bio = html.escape(kj["bio"] or "Karaoke host. Live karaoke nights, song suggestions, and premium slot bookings through TheHopper.")
     kj_phone = kj["phone"] or ""
-    kj_phone_display = kj_phone
     kj_instagram = kj["instagram"] or ""
     kj_website = kj["website"] or ""
-    slug = kj["site_slug"] or ""
 
     # Social links
-    social_html = ""
     links = []
     if kj_instagram:
         ig = html.escape(kj_instagram.lstrip("@"))
         links.append(f'<a href="https://instagram.com/{ig}" target="_blank" rel="noopener" class="social-link"><span class="ico">IG</span> @{ig}</a>')
     if kj_website:
         ws = html.escape(kj_website)
-        links.append(f'<a href="{ws}" target="_blank" rel="noopener" class="social-link"><span class="ico">WWW</span> {ws.replace("https://","").replace("http://","")}</a>')
+        display = ws.replace("https://","").replace("http://","")
+        links.append(f'<a href="{ws}" target="_blank" rel="noopener" class="social-link"><span class="ico">WWW</span> {display}</a>')
     if kj_phone:
-        links.append(f'<a href="tel:{html.escape(kj_phone)}" class="social-link"><span class="ico">TEL</span> {html.escape(kj_phone_display)}</a>')
+        links.append(f'<a href="tel:{html.escape(kj_phone)}" class="social-link"><span class="ico">TEL</span> {html.escape(kj_phone)}</a>')
     social_html = "\n      ".join(links) if links else ""
 
-    # Build venue cards + schedule data
-    venue_cards = []
-    schedule_by_day: dict[str, list[str]] = {}
+    # Build venue data for JS + schedule
+    day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    day_short = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+    schedule_by_day: dict[str, list[dict]] = {}
+    venue_js_data = []
+
     for v in venues:
+        vid = v["id"]
         v_name = html.escape(v["name"])
         v_addr = html.escape(v["address"])
         v_city = html.escape(v["city"])
+        v_lat = v["lat"] or 0
+        v_lng = v["lng"] or 0
         v_phone = v["phone"] or ""
         v_website = v["website"] or ""
         v_vibe = html.escape(v["vibe"] or "")
@@ -2869,56 +2870,81 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
         start = html.escape(v["start_time"] or "")
         end = html.escape(v["end_time"] or "")
 
-        # venue links
-        v_links_html = ""
-        v_links = []
-        if v_website:
-            v_links.append(f'<a href="{html.escape(v_website)}" target="_blank" rel="noopener">website</a>')
-        if v_phone:
-            v_links.append(f'<a href="tel:{html.escape(v_phone)}">call</a>')
-        if v_links:
-            v_links_html = f'<div class="v-links">{" &middot; ".join(v_links)}</div>'
-
-        venue_cards.append(f"""
-        <div class="venue-card">
-          <h3>{v_name}</h3>
-          <p class="v-addr">{v_addr}, {v_city}</p>
-          <p class="v-sched">{html.escape(nights_display)} &middot; {start}&ndash;{end}</p>
-          {f'<p class="v-vibe">{v_vibe}</p>' if v_vibe else ''}
-          {v_links_html}
-        </div>""")
+        venue_js_data.append({
+            "id": vid, "name": v_name, "address": v_addr, "city": v_city,
+            "lat": v_lat, "lng": v_lng, "phone": v_phone, "website": v_website,
+            "vibe": v_vibe, "nights": nights_display, "start": start, "end": end,
+        })
 
         for night in nights_list:
             if night not in schedule_by_day:
                 schedule_by_day[night] = []
-            schedule_by_day[night].append(f"{v_name} ({start}&ndash;{end})")
+            schedule_by_day[night].append({"name": v_name, "vid": vid, "start": start, "end": end})
 
-    venues_html = "\n".join(venue_cards) if venue_cards else '<p class="empty">No venues listed yet. Check back soon for upcoming karaoke nights.</p>'
-
-    # Build weekly schedule table
-    day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    day_short = {"Monday": "Mon", "Tuesday": "Tue", "Wednesday": "Wed", "Thursday": "Thu", "Friday": "Fri", "Saturday": "Sat", "Sunday": "Sun"}
+    # Schedule rows
     schedule_rows = []
     for day in day_order:
         gigs = schedule_by_day.get(day, [])
         if gigs:
-            # gigs entries already contain escaped HTML entities (&ndash;),
-            # so we join them directly without re-escaping
-            gigs_html = "<br>".join(gigs)
+            gig_items = []
+            for g in gigs:
+                gig_items.append(f'<span class="gig" onclick="selectVenue({g["vid"]})">{g["name"]} <span class="gig-time">{g["start"]}&ndash;{g["end"]}</span></span>')
+            gigs_html = "<br>".join(gig_items)
             schedule_rows.append(f'<tr class="has-gig"><td class="day">{day_short[day]}</td><td>{gigs_html}</td></tr>')
         else:
-            schedule_rows.append(f'<tr><td class="day dim">{day_short[day]}</td><td class="dim">dark night</td></tr>')
+            schedule_rows.append(f'<tr><td class="day dim">{day_short[day]}</td><td class="dim">dark</td></tr>')
     schedule_html = "\n      ".join(schedule_rows)
+
+    # Venue JSON for JS
+    venues_json = _json.dumps(venue_js_data)
+
+    # Map iframe src — use first venue as center, or a default
+    if venue_js_data:
+        center_lat = venue_js_data[0]["lat"]
+        center_lng = venue_js_data[0]["lng"]
+        # Build markers string for static-style embed
+        if GOOGLE_MAPS_KEY:
+            markers = "|".join(f"{v['lat']},{v['lng']}" for v in venue_js_data)
+            map_src = f"https://www.google.com/maps/embed/v1/place?key={GOOGLE_MAPS_KEY}&q={center_lat},{center_lng}&zoom=11&markers={markers}"
+        else:
+            # No API key — use a simple iframe embed without key (Google allows basic embeds)
+            map_src = f"https://maps.google.com/maps?q={center_lat},{center_lng}&z=11&output=embed"
+    else:
+        map_src = ""
+
+    map_html = f'<iframe src="{map_src}" width="100%" height="100%" style="border:0" loading="lazy" id="map-iframe"></iframe>' if map_src else '<div class="no-map">map unavailable</div>'
+
+    # Venue detail cards
+    venue_cards = []
+    for v in venue_js_data:
+        v_links = ""
+        v_link_items = []
+        if v["website"]:
+            v_link_items.append(f'<a href="{html.escape(v["website"])}" target="_blank" rel="noopener">website</a>')
+        if v["phone"]:
+            v_link_items.append(f'<a href="tel:{html.escape(v["phone"])}">call</a>')
+        if v_link_items:
+            v_links = f'<div class="v-links">{" &middot; ".join(v_link_items)}</div>'
+
+        venue_cards.append(f"""
+        <div class="venue-card" id="venue-{v["id"]}" onclick="selectVenue({v["id"]})">
+          <h3>{v["name"]}</h3>
+          <p class="v-addr">{v["address"]}, {v["city"]}</p>
+          <p class="v-sched">{v["nights"]} &middot; {v["start"]}&ndash;{v["end"]}</p>
+          {f'<p class="v-vibe">{v["vibe"]}</p>' if v["vibe"] else ''}
+          {v_links}
+        </div>""")
+    venues_html = "\n".join(venue_cards) if venue_cards else '<p class="empty">No venues listed yet.</p>'
 
     venues_count = len(venues)
     services_html = f"""
     <div class="service">
       <h3>Live Karaoke Hosting</h3>
-      <p>Professional karaoke hosting at {venues_count} venue{'s' if venues_count != 1 else ''} across Brevard County. Full song catalog, sound equipment setup, and crowd engagement.</p>
+      <p>Professional karaoke hosting at {venues_count} venue{'s' if venues_count != 1 else ''}. Full song catalog, sound equipment setup, and crowd engagement.</p>
     </div>
     <div class="service">
       <h3>Song Suggestions</h3>
-      <p>Singers get personalized song recommendations matched to their vocal range and style through TheHopper app. Discover your perfect karaoke song.</p>
+      <p>Singers get personalized song recommendations matched to their vocal range and style through TheHopper app.</p>
     </div>
     <div class="service">
       <h3>Premium Slots</h3>
@@ -2931,7 +2957,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{biz_esc} &mdash; Karaoke Host | karaokespot.us</title>
-  <meta name="description" content="{biz_esc} is a professional karaoke host serving Brevard County, FL. View upcoming karaoke nights, venues, and booking information.">
+  <meta name="description" content="{biz_esc} is a professional karaoke host. View upcoming karaoke nights, venues, and booking information.">
   <style>
     :root {{
       --bg: #0f0f1a;
@@ -2945,7 +2971,6 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       --pink: #c4568d;
       --cyan: #5fb8a8;
       --yellow: #d4c372;
-      --max: 720px;
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
@@ -2954,174 +2979,205 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       color: var(--text);
       line-height: 1.65;
     }}
-    .wrap {{ max-width: var(--max); margin: 0 auto; padding: 0 1rem 4rem; }}
+    .wrap {{ max-width: 900px; margin: 0 auto; padding: 0 1.5rem 4rem; }}
 
     /* site header */
     .site-header {{
       background: var(--bg2);
       border-bottom: 1px solid var(--border);
-      padding: 0.6rem 1rem;
-    }}
-    .site-header .wrap {{
+      padding: 0.5rem 1.5rem;
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      padding-bottom: 0;
+      align-items: baseline;
+      max-width: 900px;
+      margin: 0 auto;
     }}
     .brand {{
-      font-family: georgia, serif;
-      font-size: 1rem;
+      font-family: impact, "haettenschweiler", "arial narrow", sans-serif;
+      font-size: 0.85rem;
       font-weight: 700;
       color: var(--cyan);
-      letter-spacing: -0.02em;
+      letter-spacing: 0.02em;
+      text-transform: lowercase;
     }}
     .brand a {{ color: var(--cyan); text-decoration: none; }}
-    .brand-tag {{ color: var(--mute); font-size: 0.75rem; font-weight: 400; }}
+    .brand-tag {{
+      color: var(--mute);
+      font-size: 0.7rem;
+      font-family: -apple-system, system-ui, sans-serif;
+      text-transform: lowercase;
+    }}
 
     /* hero */
-    .hero {{
-      padding: 3rem 0 2rem;
-      text-align: center;
-    }}
+    .hero {{ padding: 2.5rem 0 2rem; }}
     .hero h1 {{
-      font-size: 2.4rem;
+      font-size: 2.2rem;
       font-weight: 700;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.4rem;
       letter-spacing: -0.03em;
+      text-align: left;
     }}
     .hero .tagline {{
       color: var(--dim);
-      font-size: 1.15rem;
-      max-width: 480px;
-      margin: 0 auto 1.5rem;
+      font-size: 1.1rem;
+      max-width: 520px;
+      margin-bottom: 1.2rem;
+      text-align: left;
     }}
     .social-row {{
       display: flex;
-      gap: 0.75rem;
+      gap: 0.6rem;
       flex-wrap: wrap;
-      justify-content: center;
+      justify-content: flex-start;
     }}
     .social-link {{
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
+      gap: 0.35rem;
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 0.4rem 0.9rem;
+      padding: 0.35rem 0.8rem;
       color: var(--text);
       text-decoration: none;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-family: -apple-system, system-ui, sans-serif;
     }}
     .social-link:hover {{ border-color: var(--cyan); }}
     .social-link .ico {{
       background: var(--panel2);
       border-radius: 4px;
-      padding: 0.1rem 0.3rem;
-      font-size: 0.7rem;
+      padding: 0.1rem 0.25rem;
+      font-size: 0.65rem;
       font-weight: 700;
       color: var(--mute);
     }}
 
     /* sections */
-    .section {{ margin-top: 3rem; }}
+    .section {{ margin-top: 2.5rem; }}
     .section-title {{
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       font-weight: 700;
       color: var(--mute);
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      margin-bottom: 1rem;
+      margin-bottom: 0.8rem;
       font-family: -apple-system, system-ui, sans-serif;
       border-bottom: 1px solid var(--border);
-      padding-bottom: 0.5rem;
+      padding-bottom: 0.4rem;
     }}
 
-    /* schedule table */
+    /* schedule + map two-column */
+    .schedule-map {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }}
     table.schedule {{
       width: 100%;
       border-collapse: collapse;
       font-family: -apple-system, system-ui, sans-serif;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
     }}
     table.schedule td {{
-      padding: 0.65rem 0.5rem;
+      padding: 0.55rem 0.4rem;
       border-bottom: 1px solid var(--bg2);
       vertical-align: top;
     }}
     table.schedule td.day {{
       font-weight: 700;
       color: var(--cyan);
-      width: 50px;
+      width: 42px;
       white-space: nowrap;
     }}
     table.schedule td.dim, .dim {{ color: var(--mute); }}
-    tr.has-gig td {{ color: var(--text); }}
+    .gig {{
+      cursor: pointer;
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-bottom: 2px;
+      transition: background 0.15s;
+    }}
+    .gig:hover {{ background: var(--panel); }}
+    .gig-time {{ color: var(--mute); font-size: 0.82rem; }}
+    .map-container {{
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      min-height: 300px;
+      background: var(--panel);
+    }}
+    .map-container iframe {{ display: block; }}
+    .no-map {{ display: flex; align-items: center; justify-content: center; height: 300px; color: var(--mute); font-family: -apple-system, system-ui, sans-serif; font-size: 0.85rem; }}
 
     /* venue cards */
     .venue-card {{
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 1.2rem 1.4rem;
-      margin-bottom: 0.75rem;
+      padding: 1.1rem 1.3rem;
+      margin-bottom: 0.7rem;
+      cursor: pointer;
+      transition: border-color 0.15s;
     }}
-    .venue-card h3 {{
-      font-size: 1.2rem;
-      font-weight: 700;
-      margin-bottom: 0.25rem;
-    }}
-    .v-addr {{ color: var(--dim); font-size: 0.9rem; font-family: -apple-system, system-ui, sans-serif; }}
-    .v-sched {{ color: var(--pink); font-size: 0.88rem; margin-top: 0.35rem; font-family: -apple-system, system-ui, sans-serif; }}
-    .v-vibe {{ color: var(--mute); font-size: 0.85rem; margin-top: 0.5rem; }}
-    .v-links {{ margin-top: 0.5rem; font-size: 0.85rem; font-family: -apple-system, system-ui, sans-serif; }}
+    .venue-card:hover {{ border-color: var(--cyan); }}
+    .venue-card.active {{ border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }}
+    .venue-card h3 {{ font-size: 1.15rem; font-weight: 700; margin-bottom: 0.2rem; }}
+    .v-addr {{ color: var(--dim); font-size: 0.88rem; font-family: -apple-system, system-ui, sans-serif; }}
+    .v-sched {{ color: var(--pink); font-size: 0.85rem; margin-top: 0.3rem; font-family: -apple-system, system-ui, sans-serif; }}
+    .v-vibe {{ color: var(--mute); font-size: 0.82rem; margin-top: 0.4rem; }}
+    .v-links {{ margin-top: 0.4rem; font-size: 0.82rem; font-family: -apple-system, system-ui, sans-serif; }}
     .v-links a {{ color: var(--cyan); text-decoration: none; }}
     .v-links a:hover {{ text-decoration: underline; }}
 
     /* services */
+    .services-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.7rem;
+    }}
     .service {{
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 1.2rem 1.4rem;
-      margin-bottom: 0.75rem;
+      padding: 1.1rem 1.3rem;
     }}
     .service h3 {{
-      font-size: 1.05rem;
+      font-size: 1rem;
       font-weight: 700;
       color: var(--yellow);
-      margin-bottom: 0.35rem;
+      margin-bottom: 0.3rem;
       font-family: -apple-system, system-ui, sans-serif;
     }}
     .service p {{
       color: var(--dim);
-      font-size: 0.92rem;
+      font-size: 0.88rem;
       font-family: -apple-system, system-ui, sans-serif;
     }}
 
-    .empty {{ color: var(--mute); font-style: normal; padding: 1rem 0; }}
+    .empty {{ color: var(--mute); padding: 1rem 0; }}
 
     /* footer */
     .site-footer {{
-      margin-top: 3rem;
-      padding-top: 1.5rem;
+      margin-top: 2.5rem;
+      padding-top: 1.2rem;
       border-top: 1px solid var(--border);
     }}
     .site-footer p {{
       color: var(--mute);
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       font-family: -apple-system, system-ui, sans-serif;
-      margin-bottom: 0.4rem;
-    }}
-    .site-footer .powered {{
-      color: var(--mute);
-      font-size: 0.78rem;
+      margin-bottom: 0.3rem;
     }}
     .site-footer .powered a {{ color: var(--cyan); text-decoration: none; }}
 
-    @media (max-width: 480px) {{
-      .hero h1 {{ font-size: 1.8rem; }}
+    /* responsive */
+    @media (max-width: 640px) {{
+      .schedule-map {{ grid-template-columns: 1fr; }}
+      .map-container {{ min-height: 220px; }}
+      .hero h1 {{ font-size: 1.7rem; }}
       .hero .tagline {{ font-size: 1rem; }}
     }}
   </style>
@@ -3129,10 +3185,8 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
 <body>
 
   <div class="site-header">
-    <div class="wrap">
-      <div class="brand"><a href="https://karaokespot.us">karaokespot.us</a></div>
-      <div class="brand-tag">karaoke hosts of brevard county</div>
-    </div>
+    <div class="brand"><a href="https://karaokespot.us">karaokespot.us</a></div>
+    <div class="brand-tag">karaoke, worldwide</div>
   </div>
 
   <div class="wrap">
@@ -3145,10 +3199,17 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     </div>
 
     <div class="section">
-      <div class="section-title">Weekly Schedule</div>
-      <table class="schedule">
-      {schedule_html}
-      </table>
+      <div class="section-title">Schedule & Locations</div>
+      <div class="schedule-map">
+        <div>
+          <table class="schedule">
+          {schedule_html}
+          </table>
+        </div>
+        <div class="map-container" id="map-container">
+          {map_html}
+        </div>
+      </div>
     </div>
 
     <div class="section">
@@ -3158,15 +3219,52 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
 
     <div class="section">
       <div class="section-title">Services</div>
-      {services_html}
+      <div class="services-grid">
+        {services_html}
+      </div>
     </div>
 
     <div class="site-footer">
-      <p>{biz_esc} is a professional karaoke host operating in Brevard County, Florida.</p>
-      <p>{f'Contact: {html.escape(kj_phone_display)}' if kj_phone else ''}</p>
-      <p class="powered">Site powered by <a href="https://karaokespot.us">karaokespot.us</a> &middot; Book through <a href="https://thehopper.alchemycreativelounge.com">TheHopper</a></p>
+      <p>{biz_esc} &middot; professional karaoke host</p>
+      <p>{f'Contact: {html.escape(kj_phone)}' if kj_phone else ''}</p>
+      <p class="powered">Powered by <a href="https://karaokespot.us">karaokespot.us</a> &middot; Book through <a href="https://thehopper.alchemycreativelounge.com">TheHopper</a></p>
     </div>
   </div>
+
+  <script>
+    var venues = {venues_json};
+    var mapKey = "{GOOGLE_MAPS_KEY}";
+
+    function selectVenue(id) {{
+      var v = venues.find(function(x) {{ return x.id === id; }});
+      if (!v) return;
+
+      // Highlight card
+      document.querySelectorAll('.venue-card').forEach(function(c) {{
+        c.classList.remove('active');
+      }});
+      var card = document.getElementById('venue-' + id);
+      if (card) card.classList.add('active');
+
+      // Update map iframe to zoom to this venue
+      var iframe = document.getElementById('map-iframe');
+      if (iframe) {{
+        var src;
+        if (mapKey) {{
+          src = 'https://www.google.com/maps/embed/v1/place?key=' + mapKey +
+                '&q=' + v.lat + ',' + v.lng + '&zoom=15';
+        }} else {{
+          src = 'https://maps.google.com/maps?q=' + v.lat + ',' + v.lng + '&z=15&output=embed';
+        }}
+        iframe.src = src;
+      }}
+
+      // Scroll to venue section if coming from schedule
+      if (card) {{
+        card.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+      }}
+    }}
+  </script>
 
 </body>
 </html>"""
