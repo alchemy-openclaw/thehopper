@@ -3110,12 +3110,12 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       border-radius: 12px;
       overflow: hidden;
       border: 1px solid var(--border);
-      min-height: 300px;
+      height: 400px;
       background: var(--panel);
       position: sticky;
       top: 1rem;
     }}
-    .map-container iframe {{ display: block; }}
+    .map-container iframe {{ display: block; width: 100%; height: 100%; }}
     .no-map {{ display: flex; align-items: center; justify-content: center; height: 300px; color: var(--mute); font-size: 0.85rem; }}
 
     /* venue cards */
@@ -3180,7 +3180,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     /* responsive */
     @media (max-width: 640px) {{
       .schedule-map {{ grid-template-columns: 1fr; }}
-      .map-container {{ min-height: 220px; position: static; }}
+      .map-container {{ height: 280px; position: static; }}
       .hero h1 {{ font-size: 1.7rem; }}
       .hero .tagline {{ font-size: 1rem; }}
     }}
