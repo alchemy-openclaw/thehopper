@@ -36,6 +36,8 @@ export default function KJProfileScreen() {
   const [stripeStatus, setStripeStatus] = useState<StripeStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [songRequired, setSongRequired] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     if (!kjId) return;
@@ -48,6 +50,7 @@ export default function KJProfileScreen() {
         setKJ(kjData);
         setVenues(venuesData);
         setStripeStatus(stripeData);
+        setSongRequired(kjData.song_request_required ?? false);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load KJ'))
       .finally(() => setLoading(false));
@@ -72,6 +75,21 @@ export default function KJProfileScreen() {
       await WebBrowser.openBrowserAsync(url);
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Failed to open Stripe');
+    }
+  };
+
+  const toggleSongRequired = async () => {
+    const newVal = !songRequired;
+    setSongRequired(newVal);
+    setSavingSettings(true);
+    try {
+      const updated = await api.updateKJSettings(kjId, newVal);
+      setKJ(updated);
+    } catch (e) {
+      setSongRequired(!newVal); // revert on failure
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update settings');
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -131,6 +149,28 @@ export default function KJProfileScreen() {
           onPress={stripeReady ? handleViewDashboard : handleStripeOnboard}
           variant={stripeReady ? 'secondary' : 'primary'}
         />
+      </Card>
+
+      {/* Preferences */}
+      <Card>
+        <Text style={styles.sectionTitle}>Preferences</Text>
+        <Pressable
+          onPress={toggleSongRequired}
+          disabled={savingSettings}
+          style={styles.toggleRow}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleLabel}>Require song request</Text>
+            <Text style={styles.toggleDesc}>
+              {songRequired
+                ? 'Singers must enter a song when getting in line.'
+                : 'Singers can get in line without picking a song.'}
+            </Text>
+          </View>
+          <View style={[styles.toggleSwitch, songRequired && styles.toggleSwitchOn]}>
+            <View style={[styles.toggleKnob, songRequired && styles.toggleKnobOn]} />
+          </View>
+        </Pressable>
       </Card>
 
       {/* Venues */}
@@ -198,4 +238,45 @@ const styles = StyleSheet.create({
   venueCity: { fontSize: 14, color: Colors.pink, fontWeight: '600', marginTop: 2 },
   venueMeta: { flexDirection: 'row', flexWrap: 'wrap', marginTop: Spacing.sm },
   venueVibe: { color: Colors.textDim, fontSize: 13, marginTop: Spacing.sm, fontStyle: 'italic' },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  toggleDesc: {
+    fontSize: 13,
+    color: Colors.textMute,
+    marginTop: 2,
+  },
+  toggleSwitch: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.bg2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    justifyContent: 'center',
+    padding: 2,
+  },
+  toggleSwitchOn: {
+    backgroundColor: Colors.cyan,
+    borderColor: 'transparent',
+  },
+  toggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.textMute,
+    alignSelf: 'flex-start',
+  },
+  toggleKnobOn: {
+    backgroundColor: '#fff',
+    alignSelf: 'flex-end',
+  },
 });

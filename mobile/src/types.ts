@@ -116,6 +116,7 @@ export interface KJ {
   business_name?: string | null;
   site_slug?: string | null;
   city?: string | null;
+  song_request_required?: boolean;
 }
 
 export interface PhoneVerifyResponse {

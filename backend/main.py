@@ -869,6 +869,7 @@ class KJOut(BaseModel):
     business_name: str | None = None
     site_slug: str | None = None
     city: str | None = None
+    song_request_required: bool = False
 
 
 class KJLinkVenueRequest(BaseModel):
@@ -2487,6 +2488,7 @@ def _kj_row_to_out(row: sqlite3.Row) -> KJOut:
         business_name=row["business_name"] if "business_name" in keys else None,
         site_slug=row["site_slug"] if "site_slug" in keys else None,
         city=row["city"] if "city" in keys else None,
+        song_request_required=bool(row["song_request_required"]) if "song_request_required" in keys else False,
     )
 
 
@@ -2517,6 +2519,22 @@ def get_kj(kj_id: int):
         row = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="KJ not found")
+    return _kj_row_to_out(row)
+
+
+@app.patch(f"{API_PREFIX}/kjs/{{kj_id}}/settings", response_model=KJOut)
+def update_kj_settings(kj_id: int, song_request_required: bool | None = None):
+    """Update KJ preferences. Currently supports song_request_required."""
+    with db() as conn:
+        row = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="KJ not found")
+        if song_request_required is not None:
+            conn.execute(
+                "UPDATE kjs SET song_request_required=? WHERE id=?",
+                (1 if song_request_required else 0, kj_id),
+            )
+        row = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
     return _kj_row_to_out(row)
 
 

@@ -173,6 +173,11 @@ export const api = {
 
   getKJVenues: (kj_id: number) => jsonFetch<Venue[]>(`${API_BASE}/kjs/${kj_id}/venues`),
 
+  updateKJSettings: (kj_id: number, song_request_required: boolean) =>
+    jsonFetch<KJ>(`${API_BASE}/kjs/${kj_id}/settings?song_request_required=${song_request_required}`, {
+      method: 'PATCH',
+    }),
+
   kjStripeOnboard: (kj_id: number, email: string, kyc?: {
     business_name?: string;
     first_name?: string;
