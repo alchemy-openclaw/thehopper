@@ -2604,7 +2604,25 @@ def kj_stripe_onboard(
 
     existing_acct = kj["stripe_account_id"]
 
+    # Always save the business_name if the KJ provided one (even if
+    # they already have a Stripe account — they may be re-onboarding
+    # with a different name).
+    if business_name and business_name != kj["business_name"]:
+        with db() as conn:
+            conn.execute(
+                "UPDATE kjs SET business_name=? WHERE id=?",
+                (business_name, kj_id),
+            )
+
     if existing_acct:
+        # Update the business_profile.name on the existing Stripe account
+        # so it matches what the KJ entered.
+        if business_name:
+            try:
+                import stripe
+                stripe.Account.modify(existing_acct, business_profile={"name": business_name})
+            except Exception:
+                pass  # Best-effort — not all account states allow this
         try:
             onboarding_url = connect.create_onboarding_link(existing_acct)
         except Exception as e:
@@ -2733,7 +2751,70 @@ def kj_stripe_status(kj_id: int):
 
 
 # ---------------------------------------------------------------------------
-# API: KJ public site (auto-generated static page for Stripe business_profile)
+# Stripe onboarding return pages
+# ---------------------------------------------------------------------------
+
+
+@app.get("/connect/complete")
+def connect_complete_page():
+    """Landing page after Stripe onboarding completes."""
+    return HTMLResponse(
+        content="""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Onboarding Complete | TheHopper</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; background: #1a1a2e; color: #e8e4f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .card { text-align: center; max-width: 400px; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    p { color: #a09ab8; line-height: 1.5; }
+    .check { font-size: 3rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="check">&#10003;</div>
+    <h1>Onboarding Complete</h1>
+    <p>You can close this page and return to TheHopper.</p>
+  </div>
+</body>
+</html>""",
+        media_type="text/html",
+    )
+
+
+@app.get("/connect/refresh")
+def connect_refresh_page():
+    """Landing page for Stripe onboarding refresh."""
+    return HTMLResponse(
+        content="""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Onboarding | TheHopper</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; background: #1a1a2e; color: #e8e4f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .card { text-align: center; max-width: 400px; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    p { color: #a09ab8; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Need to refresh?</h1>
+    <p>Return to TheHopper and tap "Set up payments" to restart onboarding.</p>
+  </div>
+</body>
+</html>""",
+        media_type="text/html",
+    )
+
+
+# ---------------------------------------------------------------------------
+# KJ public site (auto-generated static page for Stripe business_profile)
 # ---------------------------------------------------------------------------
 
 def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:

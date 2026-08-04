@@ -47,6 +47,9 @@ RETURN_URL = os.environ.get(
     "STRIPE_CONNECT_RETURN_URL",
     "http://localhost:5173",  # Vite dev server default
 )
+# The return and refresh URLs are appended with /connect/complete and
+# /connect/refresh respectively. These are served by the backend as
+# simple HTML pages so they work regardless of CF SSL mode.
 
 
 # ---------------------------------------------------------------------------
@@ -328,8 +331,8 @@ class ConnectManager:
         link = stripe.AccountLink.create(
             account=account_id,
             type="account_onboarding",
-            return_url=return_url or f"{RETURN_URL}?connect=complete",
-            refresh_url=refresh_url or f"{RETURN_URL}?connect=refresh",
+            return_url=return_url or f"{RETURN_URL}/connect/complete",
+            refresh_url=refresh_url or f"{RETURN_URL}/connect/refresh",
         )
         return link.url
 
