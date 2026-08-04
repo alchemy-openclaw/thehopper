@@ -1137,10 +1137,20 @@ def send_kj_message(venue_id: int, req: KJMessageRequest):
 
     with db() as conn:
         venue = conn.execute(
-            "SELECT id, kj_name, phone FROM venues WHERE id = ?", (venue_id,)
+            "SELECT * FROM venues WHERE id = ?", (venue_id,)
         ).fetchone()
         if not venue:
             raise HTTPException(status_code=404, detail="Venue not found")
+
+        # Look up the KJ's phone (prefer KJ phone over venue phone)
+        kj_id = venue["kj_id"] if "kj_id" in venue.keys() else None
+        kj_phone = ""
+        if kj_id:
+            kj_row = conn.execute(
+                "SELECT phone FROM kjs WHERE id = ?", (kj_id,)
+            ).fetchone()
+            if kj_row and kj_row["phone"]:
+                kj_phone = kj_row["phone"]
 
         # Upsert patron profile if phone provided
         if normalized_phone:
@@ -1168,13 +1178,12 @@ def send_kj_message(venue_id: int, req: KJMessageRequest):
         ).fetchone()
 
         # Forward via SMS to KJ if Twilio is configured and KJ has a phone
-        kj_phone = venue["phone"] or ""
         if kj_phone and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER:
             kj_name = venue["kj_name"] or "the KJ"
             song_part = f" (song: {req.song_request})" if req.song_request else ""
             reply_part = f" Reply: {normalized_phone}" if normalized_phone else ""
             sms_body = (
-                f"New message from {singer_name} at your venue{song_part}:\n"
+                f"New message from {singer_name} at {venue['name']}{song_part}:\n"
                 f"{req.message.strip()[:500]}{reply_part}"
             )
             send_sms(normalize_phone(kj_phone), sms_body)
