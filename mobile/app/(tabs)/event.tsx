@@ -16,6 +16,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as LinkingExpo from 'expo-linking';
 import type { AppConfig, ChatMessage, Venue } from '../../src/types';
 import { api, API_BASE } from '../../src/api';
+import { isEventActive } from '../../src/event-window';
 import { useVenueContext } from '../../src/venue-context';
 import {
   Banner,
@@ -32,6 +33,7 @@ export default function EventScreen() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [showPay, setShowPay] = useState(false);
   const [showTip, setShowTip] = useState(false);
+  const [showMessage, setShowMessage] = useState(false);
 
   useEffect(() => {
     api.getConfig().then(setConfig).catch(() => setConfig(null));
@@ -84,6 +86,7 @@ export default function EventScreen() {
   }
 
   const venue = selectedVenue;
+  const eventActive = isEventActive(venue);
 
   return (
     <KeyboardAvoidingView
@@ -114,30 +117,53 @@ export default function EventScreen() {
         )}
       </Card>
 
-      {/* Chat fills the remaining space */}
-      <View style={styles.chatSection}>
-        <ChatPanel venue={venue} />
-      </View>
+      {eventActive ? (
+        <>
+          {/* Chat fills the remaining space */}
+          <View style={styles.chatSection}>
+            <ChatPanel venue={venue} />
+          </View>
 
-      {/* Action buttons anchored at bottom */}
-      <View style={styles.actionBar}>
-        <Pressable
-          onPress={() => setShowPay(true)}
-          style={({ pressed }) => [styles.subtleBtn, pressed && styles.subtleBtnPressed]}
-        >
-          <Text style={styles.subtleBtnText}>
-            ⏭️ Jump Queue · ${venue.price_jump_queue.toFixed(2)}
+          {/* Action buttons anchored at bottom */}
+          <View style={styles.actionBar}>
+            <Pressable
+              onPress={() => setShowPay(true)}
+              style={({ pressed }) => [styles.subtleBtn, pressed && styles.subtleBtnPressed]}
+            >
+              <Text style={styles.subtleBtnText}>
+                ⏭️ Jump Queue · ${venue.price_jump_queue.toFixed(2)}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowTip(true)}
+              style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnTip, pressed && styles.subtleBtnPressed]}
+            >
+              <Text style={styles.subtleBtnText}>
+                💰 Tip KJ
+              </Text>
+            </Pressable>
+          </View>
+        </>
+      ) : (
+        /* Outside event window: show Tip KJ and Message KJ */
+        <View style={styles.offEventSection}>
+          <Text style={styles.offEventText}>
+            No live event right now. Karaoke nights: {venue.karaoke_nights.join(', ')}.
           </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setShowTip(true)}
-          style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnTip, pressed && styles.subtleBtnPressed]}
-        >
-          <Text style={styles.subtleBtnText}>
-            💰 Tip KJ
-          </Text>
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={() => setShowTip(true)}
+            style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnTip, pressed && styles.subtleBtnPressed]}
+          >
+            <Text style={styles.subtleBtnText}>💰 Tip KJ</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setShowMessage(true)}
+            style={({ pressed }) => [styles.subtleBtn, pressed && styles.subtleBtnPressed]}
+          >
+            <Text style={styles.subtleBtnText}>✉️ Message KJ</Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Modals */}
       <PaymentModal
@@ -151,6 +177,11 @@ export default function EventScreen() {
         stripeConfigured={config?.stripe_configured ?? false}
         visible={showTip}
         onClose={() => setShowTip(false)}
+      />
+      <MessageKJModal
+        venue={venue}
+        visible={showMessage}
+        onClose={() => setShowMessage(false)}
       />
     </KeyboardAvoidingView>
   );
@@ -606,6 +637,130 @@ function TipModal({
 }
 
 // ---------------------------------------------------------------------------
+// Message KJ Modal
+// ---------------------------------------------------------------------------
+
+function MessageKJModal({
+  venue,
+  visible,
+  onClose,
+}: {
+  venue: Venue;
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const [singer, setSinger] = useState('');
+  const [message, setMessage] = useState('');
+  const [song, setSong] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setSinger('');
+      setMessage('');
+      setSong('');
+      setSubmitting(false);
+      setError(null);
+      setSent(false);
+    }
+  }, [visible]);
+
+  const submit = async () => {
+    if (!message.trim()) {
+      setError('Please enter a message');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.sendKJMessage(
+        venue.id,
+        singer.trim() || 'Anonymous Singer',
+        message.trim(),
+        song.trim() || undefined,
+      );
+      setSent(true);
+      setTimeout(onClose, 1500);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not send message');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={styles.modalClose} onPress={onClose} hitSlop={12}>
+            <Text style={styles.modalCloseText}>×</Text>
+          </Pressable>
+          <Text style={styles.modalTitle}>✉️ Message {venue.kj_name || 'the KJ'}</Text>
+          <Text style={styles.modalSub}>{venue.name}</Text>
+
+          {sent ? (
+            <Text style={styles.successText}>Message sent! The KJ will see it soon.</Text>
+          ) : (
+            <>
+              <Text style={styles.fieldLabel}>Your name (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Anonymous Singer"
+                placeholderTextColor={Colors.textMute}
+                value={singer}
+                onChangeText={setSinger}
+                maxLength={60}
+              />
+
+              <Text style={styles.fieldLabel}>Song request (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Don't Stop Believin'"
+                placeholderTextColor={Colors.textMute}
+                value={song}
+                onChangeText={setSong}
+                maxLength={200}
+              />
+
+              <Text style={styles.fieldLabel}>Message</Text>
+              <TextInput
+                style={[styles.input, { minHeight: 80 }]}
+                placeholder="Leave a message for the KJ..."
+                placeholderTextColor={Colors.textMute}
+                value={message}
+                onChangeText={setMessage}
+                maxLength={500}
+                multiline
+                textAlignVertical="top"
+              />
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                onPress={submit}
+                disabled={submitting}
+                style={({ pressed }) => [
+                  styles.submitBtn,
+                  submitting && styles.submitBtnDisabled,
+                  pressed && !submitting && styles.submitBtnPressed,
+                ]}
+              >
+                <Text style={styles.submitBtnText}>
+                  {submitting ? 'Sending...' : 'Send Message'}
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
 
@@ -878,5 +1033,54 @@ const styles = StyleSheet.create({
   },
   tipPresetTextActive: {
     color: '#1a1a2e',
+  },
+
+  // Off-event section
+  offEventSection: {
+    flex: 1,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+  },
+  offEventText: {
+    color: Colors.textDim,
+    fontSize: 15,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+
+  // Message KJ modal
+  successText: {
+    color: Colors.cyan,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingVertical: Spacing.lg,
+  },
+  errorText: {
+    color: Colors.pink,
+    fontSize: 13,
+    marginBottom: Spacing.sm,
+  },
+  submitBtn: {
+    backgroundColor: Colors.pink,
+    borderRadius: Radius.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
+    marginTop: Spacing.xs,
+  },
+  submitBtnDisabled: {
+    opacity: 0.5,
+  },
+  submitBtnPressed: {
+    opacity: 0.85,
+  },
+  submitBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

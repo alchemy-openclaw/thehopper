@@ -112,6 +112,13 @@ export const api = {
       body: JSON.stringify({ nickname, message }),
     }),
 
+  sendKJMessage: (venue_id: number, singer_name: string, message: string, song_request?: string) =>
+    jsonFetch<{ id: number; venue_id: number; status: string }>(`${API_BASE}/venues/${venue_id}/message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ singer_name, message, song_request }),
+    }),
+
   // --- Venue submission (add a karaoke spot) ---
 
   submitVenue: (submission: VenueSubmission) =>
