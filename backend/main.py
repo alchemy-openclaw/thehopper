@@ -3045,7 +3045,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       content: '';
       position: absolute;
       top: -20px; left: -20px; right: -20px; bottom: -20px;
-      background: url('https://images.unsplash.com/photo-1516280440614-37939bbacd18?w=1200&q=80') center/cover no-repeat;
+      background: url('https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1200&q=80') center/cover no-repeat;
       filter: blur(12px) brightness(0.4) saturate(1.2);
       z-index: 0;
     }}
