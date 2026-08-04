@@ -18,6 +18,7 @@ import type { AppConfig, ChatMessage, Venue } from '../../src/types';
 import { api, API_BASE } from '../../src/api';
 import { isEventActive } from '../../src/event-window';
 import { useVenueContext } from '../../src/venue-context';
+import { usePrefsContext } from '../../src/prefs-context';
 import {
   Banner,
   Button,
@@ -371,14 +372,15 @@ function PaymentModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const [prefs, updatePrefs] = usePrefsContext();
   const [singer, setSinger] = useState('');
   const [song, setSong] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!visible) {
-      setSinger('');
+    if (visible) {
+      setSinger(prefs.singer_name || '');
       setSong('');
       setSubmitting(false);
       setError(null);
@@ -389,11 +391,14 @@ function PaymentModal({
     setSubmitting(true);
     setError(null);
     try {
+      const nameVal = singer.trim() || 'Anonymous Singer';
       const res = await api.createPaymentSession(
         venue.id,
-        singer.trim() || 'Anonymous Singer',
+        nameVal,
         song.trim(),
       );
+      // Save singer name to prefs
+      updatePrefs((p) => ({ ...p, singer_name: nameVal !== 'Anonymous Singer' ? nameVal : p.singer_name }));
       let url = res.checkout_url;
       if (url.startsWith('/')) {
         url = `${API_BASE.replace(/\/api$/, '')}${url}`;
@@ -649,6 +654,7 @@ function MessageKJModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const [prefs, updatePrefs] = usePrefsContext();
   const [singer, setSinger] = useState('');
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
@@ -659,8 +665,8 @@ function MessageKJModal({
 
   useEffect(() => {
     if (visible) {
-      setSinger('');
-      setPhone('');
+      setSinger(prefs.singer_name || '');
+      setPhone(prefs.singer_phone || '');
       setMessage('');
       setSong('');
       setSubmitting(false);
@@ -677,13 +683,17 @@ function MessageKJModal({
     setSubmitting(true);
     setError(null);
     try {
+      const nameVal = singer.trim() || 'Anonymous Singer';
+      const phoneVal = phone.trim();
       await api.sendKJMessage(
         venue.id,
-        singer.trim() || 'Anonymous Singer',
+        nameVal,
         message.trim(),
         song.trim() || undefined,
-        phone.trim() || undefined,
+        phoneVal || undefined,
       );
+      // Save to prefs so next time the fields are pre-filled
+      updatePrefs((p) => ({ ...p, singer_name: nameVal !== 'Anonymous Singer' ? nameVal : p.singer_name, singer_phone: phoneVal || p.singer_phone }));
       setSent(true);
       setTimeout(onClose, 1500);
     } catch (e) {

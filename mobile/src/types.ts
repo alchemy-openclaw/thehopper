@@ -64,6 +64,8 @@ export interface UserPrefs {
   favorite_artists: string;
   favorite_genres: string;
   favorites: number[]; // song ids
+  singer_name: string;
+  singer_phone: string;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -71,6 +73,8 @@ export const DEFAULT_PREFS: UserPrefs = {
   favorite_artists: '',
   favorite_genres: '',
   favorites: [],
+  singer_name: '',
+  singer_phone: '',
 };
 
 // --- New types for venue submission, KJ, phone verification, devices ---

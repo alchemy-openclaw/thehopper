@@ -870,10 +870,22 @@ class KJLinkVenueRequest(BaseModel):
     venue_id: int
 
 
+class PatronProfileRequest(BaseModel):
+    """Create or update a patron's tiny profile."""
+    name: str = ""
+    phone: str = ""
+
+
+class PatronProfileResponse(BaseModel):
+    id: int
+    name: str | None
+    phone: str
+
+
 class DeviceRegisterRequest(BaseModel):
     push_token: str
-    platform: str | None = None  # ios | android | web
-    phone: str | None = None
+    platform: str = ""
+    phone: str = ""
     kj_id: int | None = None
     venue_id: int | None = None
 
@@ -3466,6 +3478,37 @@ def kj_site(slug: str, theme: str | None = None):
 # ---------------------------------------------------------------------------
 # API: Device registration (push tokens)
 # ---------------------------------------------------------------------------
+
+
+@app.post(f"{API_PREFIX}/patrons/profile", response_model=PatronProfileResponse)
+def save_patron_profile(req: PatronProfileRequest):
+    """Create or update a patron's tiny profile (name + phone).
+
+    Called when a patron enters their name/phone in the app, even before
+    sending a message. This lets us pre-populate fields and build a profile
+    that KJs can use to reply.
+    """
+    name = req.name.strip()[:120] if req.name else ""
+    phone = normalize_phone(req.phone) if req.phone else ""
+
+    if not phone:
+        raise HTTPException(status_code=400, detail="Phone is required")
+
+    with db() as conn:
+        conn.execute(
+            """INSERT INTO patrons (phone, name) VALUES (?, ?)
+               ON CONFLICT(phone) DO UPDATE SET name=excluded.name""",
+            (phone, name or None),
+        )
+        row = conn.execute(
+            "SELECT * FROM patrons WHERE phone = ?", (phone,)
+        ).fetchone()
+
+    return PatronProfileResponse(
+        id=row["id"],
+        name=row["name"],
+        phone=row["phone"],
+    )
 
 
 @app.post(f"{API_PREFIX}/devices/register")

@@ -119,6 +119,13 @@ export const api = {
       body: JSON.stringify({ singer_name, message, song_request, singer_phone }),
     }),
 
+  savePatronProfile: (name: string, phone: string) =>
+    jsonFetch<{ id: number; name: string | null; phone: string }>(`${API_BASE}/patrons/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone }),
+    }),
+
   // --- Venue submission (add a karaoke spot) ---
 
   submitVenue: (submission: VenueSubmission) =>
