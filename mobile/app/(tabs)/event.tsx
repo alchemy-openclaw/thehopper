@@ -831,8 +831,8 @@ function GetInLineModal({
   }, [visible]);
 
   const submit = async () => {
-    if (!song.trim()) {
-      setError('Please enter a song request');
+    if (venue.song_request_required && !song.trim()) {
+      setError('This KJ requires a song request');
       return;
     }
     setSubmitting(true);
@@ -894,7 +894,9 @@ function GetInLineModal({
                 keyboardType="phone-pad"
               />
 
-              <Text style={styles.fieldLabel}>Song request</Text>
+              <Text style={styles.fieldLabel}>
+                Song request {venue.song_request_required ? '' : '(optional)'}
+              </Text>
               <TextInput
                 style={styles.input}
                 placeholder="e.g. Don't Stop Believin' — Journey"

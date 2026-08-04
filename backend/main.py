@@ -396,6 +396,13 @@ def init_db() -> None:
         if "singer_phone" not in kj_msg_cols:
             conn.execute("ALTER TABLE kj_messages ADD COLUMN singer_phone TEXT")
 
+        # Migration: add song_request_required to kjs (KJ preference)
+        kj_cols = {row["name"] for row in conn.execute("PRAGMA table_info(kjs)")}
+        if "song_request_required" not in kj_cols:
+            conn.execute(
+                "ALTER TABLE kjs ADD COLUMN song_request_required INTEGER NOT NULL DEFAULT 0"
+            )
+
         # Patrons table — tiny profiles so KJs can reply
         conn.executescript(
             """
@@ -895,7 +902,7 @@ class DeviceRegisterRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None) -> dict:
+def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None, kj_song_required: bool = False) -> dict:
     return {
         "id": row["id"],
         "name": row["name"],
@@ -916,6 +923,7 @@ def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None) -> dict:
         "distance_miles": round(distance, 1) if distance is not None else None,
         "stripe_account_id": row["stripe_account_id"] if "stripe_account_id" in row.keys() else None,
         "stripe_onboarding_status": row["stripe_onboarding_status"] if "stripe_onboarding_status" in row.keys() else "none",
+        "song_request_required": kj_song_required,
     }
 
 
@@ -1087,6 +1095,11 @@ def list_venues(
     """List karaoke venues, optionally sorted by distance from (lat,lng)."""
     with db() as conn:
         rows = conn.execute("SELECT * FROM venues").fetchall()
+        # Build a map of kj_id -> song_request_required for all KJs
+        kj_req_map: dict[int, bool] = {}
+        kj_rows = conn.execute("SELECT id, song_request_required FROM kjs").fetchall()
+        for kj in kj_rows:
+            kj_req_map[kj["id"]] = bool(kj["song_request_required"])
 
     out = []
     for r in rows:
@@ -1095,7 +1108,9 @@ def list_venues(
         dist = None
         if lat is not None and lng is not None:
             dist = haversine_miles(lat, lng, r["lat"], r["lng"])
-        out.append(venue_row_to_dict(r, dist))
+        kj_id = r["kj_id"] if "kj_id" in r.keys() else None
+        song_required = kj_req_map.get(kj_id, False) if kj_id else False
+        out.append(venue_row_to_dict(r, dist, song_required))
 
     if lat is not None and lng is not None:
         out.sort(key=lambda v: (v["distance_miles"] is None, v["distance_miles"]))

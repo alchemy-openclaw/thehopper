@@ -16,6 +16,7 @@ export interface Venue {
   price_jump_queue: number;
   vibe: string | null;
   distance_miles: number | null;
+  song_request_required: boolean;
 }
 
 export interface Song {
