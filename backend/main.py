@@ -3401,10 +3401,10 @@ def kj_site(slug: str, theme: str | None = None):
             (slug,),
         ).fetchall()
 
-    if theme == "light":
-        html_content = _kj_site_html_light(kj, venues)
-    else:
+    if theme == "dark":
         html_content = _kj_site_html(kj, venues)
+    else:
+        html_content = _kj_site_html_light(kj, venues)
     return HTMLResponse(content=html_content, media_type="text/html")
 
 
@@ -3479,13 +3479,13 @@ async def kj_subdomain_middleware(request: Request, call_next):
                     ).fetchall()
             if kj:
                 theme = request.query_params.get("theme")
-                if theme == "light":
+                if theme == "dark":
                     return HTMLResponse(
-                        content=_kj_site_html_light(kj, venues),
+                        content=_kj_site_html(kj, venues),
                         media_type="text/html",
                     )
                 return HTMLResponse(
-                    content=_kj_site_html(kj, venues),
+                    content=_kj_site_html_light(kj, venues),
                     media_type="text/html",
                 )
     return await call_next(request)
