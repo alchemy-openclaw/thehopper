@@ -139,7 +139,7 @@ export const api = {
 
   // --- KJ (Karaoke Jockey) ---
 
-  registerKJ: (data: { name: string; phone: string; bio?: string; instagram?: string; website?: string; business_name?: string }) =>
+  registerKJ: (data: { name: string; phone: string; bio?: string; instagram?: string; website?: string; business_name?: string; city?: string }) =>
     jsonFetch<KJ>(`${API_BASE}/kjs/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

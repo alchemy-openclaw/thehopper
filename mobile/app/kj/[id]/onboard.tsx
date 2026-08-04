@@ -35,6 +35,7 @@ export default function StripeOnboardScreen() {
   const [email, setEmail] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [kjWebsite, setKjWebsite] = useState('');
+  const [kjCity, setKjCity] = useState('');
   const [dob, setDob] = useState(''); // MM/DD/YYYY
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
@@ -49,6 +50,7 @@ export default function StripeOnboardScreen() {
         setKJ(data);
         setBusinessName(data.business_name || data.name || '');
         setKjWebsite(data.website || '');
+        setKjCity(data.city || '');
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load KJ'))
       .finally(() => setLoading(false));
@@ -72,6 +74,7 @@ export default function StripeOnboardScreen() {
           phone: kj?.phone || '',
           website: kjWebsite.trim(),
           business_name: businessName.trim() || undefined,
+          city: kjCity.trim() || undefined,
         });
       }
 
@@ -186,6 +189,18 @@ export default function StripeOnboardScreen() {
               site is better if you have it.
             </Text>
           )}
+
+          <Text style={styles.label}>home city</Text>
+          <TextInput
+            style={styles.input}
+            value={kjCity}
+            onChangeText={setKjCity}
+            placeholder="e.g. cocoa beach"
+            placeholderTextColor={Colors.textMute}
+          />
+          <Text style={styles.hint}>
+            shown on your public site as "centered in {kjCity || 'your city'}, fl".
+          </Text>
         </Card>
 
         <Card>

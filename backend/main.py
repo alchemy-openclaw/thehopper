@@ -314,6 +314,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE kjs ADD COLUMN site_slug TEXT")
         if "business_name" not in kj_cols:
             conn.execute("ALTER TABLE kjs ADD COLUMN business_name TEXT")
+        if "city" not in kj_cols:
+            conn.execute("ALTER TABLE kjs ADD COLUMN city TEXT")
 
         # Migration: add kj_id column to venues (links venue → KJ record)
         # ------------------------------------------------------------------
@@ -822,6 +824,7 @@ class KJRegisterRequest(BaseModel):
     website: str | None = None
     photo_url: str | None = None
     business_name: str | None = None  # operating name for Stripe (defaults to name)
+    city: str | None = None  # home city for "Centered in" on KJ site
 
 
 class KJOut(BaseModel):
@@ -837,6 +840,7 @@ class KJOut(BaseModel):
     created_at: str
     business_name: str | None = None
     site_slug: str | None = None
+    city: str | None = None
 
 
 class KJLinkVenueRequest(BaseModel):
@@ -2398,6 +2402,7 @@ def _kj_row_to_out(row: sqlite3.Row) -> KJOut:
         verified=bool(row["verified"]), created_at=row["created_at"],
         business_name=row["business_name"] if "business_name" in keys else None,
         site_slug=row["site_slug"] if "site_slug" in keys else None,
+        city=row["city"] if "city" in keys else None,
     )
 
 
@@ -2409,14 +2414,14 @@ def register_kj(req: KJRegisterRequest):
         existing = conn.execute("SELECT * FROM kjs WHERE phone=?", (phone,)).fetchone()
         if existing:
             conn.execute(
-                "UPDATE kjs SET name=?, bio=?, instagram=?, website=?, photo_url=?, business_name=COALESCE(?, business_name) WHERE id=?",
-                (req.name.strip(), req.bio, req.instagram, req.website, req.photo_url, req.business_name, existing["id"]),
+                "UPDATE kjs SET name=?, bio=?, instagram=?, website=?, photo_url=?, business_name=COALESCE(?, business_name), city=COALESCE(?, city) WHERE id=?",
+                (req.name.strip(), req.bio, req.instagram, req.website, req.photo_url, req.business_name, req.city, existing["id"]),
             )
             row = conn.execute("SELECT * FROM kjs WHERE id=?", (existing["id"],)).fetchone()
         else:
             cur = conn.execute(
-                "INSERT INTO kjs (name, phone, bio, instagram, website, photo_url, business_name) VALUES (?,?,?,?,?,?,?)",
-                (req.name.strip(), phone, req.bio, req.instagram, req.website, req.photo_url, req.business_name),
+                "INSERT INTO kjs (name, phone, bio, instagram, website, photo_url, business_name, city) VALUES (?,?,?,?,?,?,?,?)",
+                (req.name.strip(), phone, req.bio, req.instagram, req.website, req.photo_url, req.business_name, req.city),
             )
             row = conn.execute("SELECT * FROM kjs WHERE id=?", (cur.lastrowid,)).fetchone()
     return _kj_row_to_out(row)
@@ -2929,13 +2934,16 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     # Venue JSON for JS
     venues_json = _json.dumps(venue_js_data)
 
-    # Determine KJ's center city — most common city among venues
-    city_counts: dict[str, int] = {}
-    for v in venue_js_data:
-        c = v["city"]
-        if c:
-            city_counts[c] = city_counts.get(c, 0) + 1
-    kj_city = max(city_counts, key=lambda k: city_counts[k]) if city_counts else ""
+    # Determine KJ's home city for "Centered in" line
+    kj_city = kj["city"] if "city" in kj.keys() and kj["city"] else ""
+    # Fallback to most common venue city if KJ has no city set
+    if not kj_city and venue_js_data:
+        city_counts: dict[str, int] = {}
+        for v in venue_js_data:
+            c = v["city"]
+            if c:
+                city_counts[c] = city_counts.get(c, 0) + 1
+        kj_city = max(city_counts, key=lambda k: city_counts[k]) if city_counts else ""
     centered_in = f"Centered in {html.escape(kj_city)}, FL" if kj_city else ""
 
     # Map: use Maps JavaScript API for smooth panTo, fallback to iframe embed
