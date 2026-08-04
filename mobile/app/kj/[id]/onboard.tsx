@@ -163,7 +163,7 @@ export default function StripeOnboardScreen() {
             account. defaults to your name if left blank.
           </Text>
 
-          <Text style={styles.label}>your website (optional)</Text>
+          <Text style={styles.label}>your website</Text>
           <TextInput
             style={styles.input}
             value={kjWebsite}
@@ -173,10 +173,19 @@ export default function StripeOnboardScreen() {
             keyboardType="url"
             autoCapitalize="none"
           />
-          <Text style={styles.hint}>
-            if you have your own website, we'll use it for stripe verification
-            instead of generating one. update your kj profile to set this.
-          </Text>
+          {kjWebsite.trim() ? (
+            <Text style={styles.hint}>
+              stripe will verify your business through this site. make sure it
+              shows your name and what you do.
+            </Text>
+          ) : (
+            <Text style={styles.hintImportant}>
+              if you have your own website, enter it here. stripe requires a
+              public business page to verify your account. if you don't have
+              one, we'll generate one for you at karaokespot.us — but your own
+              site is better if you have it.
+            </Text>
+          )}
         </Card>
 
         <Card>
@@ -290,6 +299,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginTop: 4,
+  },
+  hintImportant: {
+    color: Colors.yellow,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
+    fontWeight: '600',
   },
   input: {
     backgroundColor: Colors.bg2,
