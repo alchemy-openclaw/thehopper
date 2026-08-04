@@ -3319,6 +3319,9 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       map = new google.maps.Map(document.getElementById('map'), {{
         center: {{ lat: centerLat, lng: centerLng }},
         zoom: 11,
+        streetViewControl: false,
+        mapTypeControl: false,
+        fullscreenControl: false,
         styles: [{{ elementType: "geometry", stylers: [{{ color: "#1c1c34" }}] }},
                  {{ elementType: "labels.text.stroke", stylers: [{{ color: "#1c1c34" }}] }},
                  {{ elementType: "labels.text.fill", stylers: [{{ color: "#7a7a98" }}] }},
