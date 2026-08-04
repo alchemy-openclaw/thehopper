@@ -2929,18 +2929,24 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     # Venue JSON for JS
     venues_json = _json.dumps(venue_js_data)
 
-    # Map iframe src
+    # Determine KJ's center city — most common city among venues
+    city_counts: dict[str, int] = {}
+    for v in venue_js_data:
+        c = v["city"]
+        if c:
+            city_counts[c] = city_counts.get(c, 0) + 1
+    kj_city = max(city_counts, key=lambda k: city_counts[k]) if city_counts else ""
+    centered_in = f"Centered in {html.escape(kj_city)}, FL" if kj_city else ""
+
+    # Map: use Maps JavaScript API for smooth panTo, fallback to iframe embed
     if venue_js_data:
         center_lat = venue_js_data[0]["lat"]
         center_lng = venue_js_data[0]["lng"]
-        if GOOGLE_MAPS_KEY:
-            map_src = f"https://www.google.com/maps/embed/v1/place?key={GOOGLE_MAPS_KEY}&q={center_lat},{center_lng}&zoom=11"
-        else:
-            map_src = f"https://maps.google.com/maps?q={center_lat},{center_lng}&z=11&output=embed"
+        has_map = True
     else:
-        map_src = ""
-
-    map_html = f'<iframe src="{map_src}" width="100%" height="100%" style="border:0" loading="lazy" id="map-iframe"></iframe>' if map_src else '<div class="no-map">map unavailable</div>'
+        center_lat = 0
+        center_lng = 0
+        has_map = False
 
     # Venue detail cards
     venue_cards = []
@@ -3069,8 +3075,14 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       color: var(--dim);
       font-size: 1.05rem;
       max-width: 520px;
-      margin-bottom: 1.2rem;
+      margin-bottom: 0.5rem;
       text-align: left;
+    }}
+    .centered-in {{
+      color: var(--cyan);
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 1.2rem;
     }}
     .social-row {{
       display: flex;
@@ -3243,6 +3255,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       <div class="hero">
         <h1>{biz_esc}</h1>
         <p class="tagline">{bio}</p>
+        {f'<p class="centered-in">{centered_in}</p>' if centered_in else ''}
         <div class="social-row">
         {social_html}
         </div>
@@ -3260,7 +3273,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
           </table>
         </div>
         <div class="map-container" id="map-container">
-          {map_html}
+          {f'<div id="map" style="width:100%;height:100%;"></div>' if has_map else '<div class="no-map">map unavailable</div>'}
         </div>
       </div>
     </div>
@@ -3289,6 +3302,34 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
   <script>
     var venues = {venues_json};
     var mapKey = "{GOOGLE_MAPS_KEY}";
+    var centerLat = {center_lat};
+    var centerLng = {center_lng};
+    var map = null;
+    var markers = {{}};
+
+    function initMap() {{
+      map = new google.maps.Map(document.getElementById('map'), {{
+        center: {{ lat: centerLat, lng: centerLng }},
+        zoom: 11,
+        styles: [{{ elementType: "geometry", stylers: [{{ color: "#1c1c34" }}] }},
+                 {{ elementType: "labels.text.stroke", stylers: [{{ color: "#1c1c34" }}] }},
+                 {{ elementType: "labels.text.fill", stylers: [{{ color: "#7a7a98" }}] }},
+                 {{ featureType: "road", elementType: "geometry", stylers: [{{ color: "#2a2a48" }}] }},
+                 {{ featureType: "water", elementType: "geometry", stylers: [{{ color: "#161628" }}] }},
+                 {{ featureType: "poi", elementType: "geometry", stylers: [{{ color: "#22223a" }}] }}]
+      }});
+
+      // Add markers for all venues
+      venues.forEach(function(v) {{
+        var marker = new google.maps.Marker({{
+          position: {{ lat: v.lat, lng: v.lng }},
+          map: map,
+          title: v.name
+        }});
+        marker.addListener('click', function() {{ selectVenue(v.id); }});
+        markers[v.id] = marker;
+      }});
+    }}
 
     function selectVenue(id) {{
       var v = venues.find(function(x) {{ return x.id === id; }});
@@ -3307,17 +3348,10 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
         list.insertBefore(card, list.firstChild);
       }}
 
-      // Update map iframe to zoom to this venue
-      var iframe = document.getElementById('map-iframe');
-      if (iframe) {{
-        var src;
-        if (mapKey) {{
-          src = 'https://www.google.com/maps/embed/v1/place?key=' + mapKey +
-                '&q=' + v.lat + ',' + v.lng + '&zoom=15';
-        }} else {{
-          src = 'https://maps.google.com/maps?q=' + v.lat + ',' + v.lng + '&z=15&output=embed';
-        }}
-        iframe.src = src;
+      // Smooth pan to venue and zoom in
+      if (map) {{
+        map.panTo({{ lat: v.lat, lng: v.lng }});
+        map.setZoom(15);
       }}
 
       // Scroll to the schedule section so the map is at the top of the screen
@@ -3326,6 +3360,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       }});
     }}
   </script>
+  {(f'<script src="https://maps.googleapis.com/maps/api/js?key={GOOGLE_MAPS_KEY}&callback=initMap" async defer></script>') if has_map else ''}
 
 </body>
 </html>"""
