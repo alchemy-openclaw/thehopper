@@ -3017,6 +3017,8 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       display: flex;
       justify-content: space-between;
       align-items: baseline;
+      position: relative;
+      z-index: 10;
     }}
     .brand {{
       font-family: impact, "haettenschweiler", "arial narrow", sans-serif;
@@ -3033,8 +3035,29 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       text-transform: lowercase;
     }}
 
-    /* hero */
-    .hero {{ padding: 2.5rem 0 2rem; }}
+    /* hero with blurred background image */
+    .hero-bg {{
+      position: relative;
+      overflow: hidden;
+      padding: 3rem 0 2.5rem;
+    }}
+    .hero-bg::before {{
+      content: '';
+      position: absolute;
+      top: -20px; left: -20px; right: -20px; bottom: -20px;
+      background: url('https://images.unsplash.com/photo-1516280440614-37939bbacd18?w=1200&q=80') center/cover no-repeat;
+      filter: blur(12px) brightness(0.4) saturate(1.2);
+      z-index: 0;
+    }}
+    .hero-bg::after {{
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(to bottom, rgba(26,26,46,0.7) 0%, rgba(26,26,46,0.9) 100%);
+      z-index: 1;
+    }}
+    .hero {{ position: relative; z-index: 2; }}
+    .hero-bg .wrap {{ padding-bottom: 0; }}
     .hero h1 {{
       font-size: 2.2rem;
       font-weight: 800;
@@ -3132,7 +3155,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       border-radius: 12px;
       overflow: hidden;
       border: 1px solid var(--border);
-      height: 320px;
+      height: 272px;
       background: var(--panel);
       position: sticky;
       top: 1rem;
@@ -3202,7 +3225,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     /* responsive */
     @media (max-width: 640px) {{
       .schedule-map {{ grid-template-columns: 1fr; }}
-      .map-container {{ height: 256px; position: static; }}
+      .map-container {{ height: 218px; position: static; }}
       .hero h1 {{ font-size: 1.7rem; }}
       .hero .tagline {{ font-size: 1rem; }}
     }}
@@ -3215,15 +3238,19 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     <div class="brand-tag">karaoke, worldwide</div>
   </div>
 
-  <div class="wrap">
-    <div class="hero">
-      <h1>{biz_esc}</h1>
-      <p class="tagline">{bio}</p>
-      <div class="social-row">
-      {social_html}
+  <div class="hero-bg">
+    <div class="wrap">
+      <div class="hero">
+        <h1>{biz_esc}</h1>
+        <p class="tagline">{bio}</p>
+        <div class="social-row">
+        {social_html}
+        </div>
       </div>
     </div>
+  </div>
 
+  <div class="wrap">
     <div class="section" id="schedule-section">
       <div class="section-title">Schedule & Locations</div>
       <div class="schedule-map">
