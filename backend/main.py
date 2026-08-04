@@ -2894,18 +2894,22 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
                 schedule_by_day[night] = []
             schedule_by_day[night].append({"name": v_name, "vid": vid, "start": start, "end": end})
 
-    # Schedule rows
+    # Schedule rows — columnar: day | start | venue
     schedule_rows = []
     for day in day_order:
         gigs = schedule_by_day.get(day, [])
         if gigs:
-            gig_items = []
             for g in gigs:
-                gig_items.append(f'<span class="gig" onclick="selectVenue({g["vid"]})">{g["name"]} <span class="gig-time">{g["start"]}&ndash;{g["end"]}</span></span>')
-            gigs_html = "<br>".join(gig_items)
-            schedule_rows.append(f'<tr class="has-gig"><td class="day">{day_short[day]}</td><td>{gigs_html}</td></tr>')
+                schedule_rows.append(
+                    f'<tr class="has-gig"><td class="day">{day_short[day]}</td>'
+                    f'<td class="time">{g["start"]}</td>'
+                    f'<td class="gig" onclick="selectVenue({g["vid"]})">{g["name"]}</td></tr>'
+                )
         else:
-            schedule_rows.append(f'<tr><td class="day dim">{day_short[day]}</td><td class="dim">dark</td></tr>')
+            schedule_rows.append(
+                f'<tr><td class="day dim">{day_short[day]}</td>'
+                f'<td class="dim"></td><td class="dim">dark</td></tr>'
+            )
     schedule_html = "\n      ".join(schedule_rows)
 
     # Venue JSON for JS
@@ -3092,8 +3096,14 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     table.schedule td.day {{
       font-weight: 700;
       color: var(--cyan);
-      width: 42px;
+      width: 38px;
       white-space: nowrap;
+    }}
+    table.schedule td.time {{
+      color: var(--mute);
+      width: 52px;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }}
     table.schedule td.dim, .dim {{ color: var(--mute); }}
     .gig {{
@@ -3101,16 +3111,14 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       display: inline-block;
       padding: 2px 6px;
       border-radius: 4px;
-      margin-bottom: 2px;
       transition: background 0.15s;
     }}
     .gig:hover {{ background: var(--panel); }}
-    .gig-time {{ color: var(--mute); font-size: 0.82rem; }}
     .map-container {{
       border-radius: 12px;
       overflow: hidden;
       border: 1px solid var(--border);
-      height: 400px;
+      height: 320px;
       background: var(--panel);
       position: sticky;
       top: 1rem;
@@ -3180,7 +3188,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     /* responsive */
     @media (max-width: 640px) {{
       .schedule-map {{ grid-template-columns: 1fr; }}
-      .map-container {{ height: 280px; position: static; }}
+      .map-container {{ height: 256px; position: static; }}
       .hero h1 {{ font-size: 1.7rem; }}
       .hero .tagline {{ font-size: 1rem; }}
     }}
