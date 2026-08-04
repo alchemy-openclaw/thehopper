@@ -2827,6 +2827,20 @@ def _format_phone(phone: str) -> str:
     return phone
 
 
+def _format_time(t: str) -> str:
+    """Convert 24-hour time (HH:MM) to 12-hour with am/pm."""
+    try:
+        h, m = t.split(":")
+        h = int(h)
+        suffix = "pm" if h >= 12 else "am"
+        h12 = h % 12
+        if h12 == 0:
+            h12 = 12
+        return f"{h12}:{m}{suffix}"
+    except Exception:
+        return t
+
+
 def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     """Render a self-contained HTML page for a KJ's business.
 
@@ -2879,8 +2893,8 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
         nights_raw = v["karaoke_nights"] or ""
         nights_list = [n.strip() for n in nights_raw.split(",") if n.strip()]
         nights_display = ", ".join(nights_list) if nights_list else "schedule varies"
-        start = html.escape(v["start_time"] or "")
-        end = html.escape(v["end_time"] or "")
+        start = html.escape(_format_time(v["start_time"] or ""))
+        end = html.escape(_format_time(v["end_time"] or ""))
 
         venue_js_data.append({
             "id": vid, "name": v_name, "address": v_addr, "city": v_city,
