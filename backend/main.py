@@ -2916,8 +2916,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
         center_lat = venue_js_data[0]["lat"]
         center_lng = venue_js_data[0]["lng"]
         if GOOGLE_MAPS_KEY:
-            markers = "|".join(f"{v['lat']},{v['lng']}" for v in venue_js_data)
-            map_src = f"https://www.google.com/maps/embed/v1/place?key={GOOGLE_MAPS_KEY}&q={center_lat},{center_lng}&zoom=11&markers={markers}"
+            map_src = f"https://www.google.com/maps/embed/v1/place?key={GOOGLE_MAPS_KEY}&q={center_lat},{center_lng}&zoom=11"
         else:
             map_src = f"https://maps.google.com/maps?q={center_lat},{center_lng}&z=11&output=embed"
     else:
