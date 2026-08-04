@@ -3011,7 +3011,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
 
     /* full-width site header */
     .site-header {{
-      background: var(--bg2);
+      background: #111120;
       border-bottom: 1px solid var(--border);
       padding: 0.5rem 2rem;
       display: flex;
@@ -3021,7 +3021,7 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
       z-index: 10;
     }}
     .brand {{
-      font-family: impact, "haettenschweiler", "arial narrow", sans-serif;
+      font-family: "courier new", courier, monospace;
       font-size: 0.85rem;
       font-weight: 700;
       color: var(--cyan);
