@@ -40,6 +40,7 @@ from pydantic import BaseModel
 
 from seed_data import SONGS, VENUES
 from stripe_connect import ConnectManager, ConnectAccount
+from kj_site_light import _kj_site_html_light
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -3378,12 +3379,14 @@ def _kj_site_html(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
 
 
 @app.get("/kj-sites/{slug}")
-def kj_site(slug: str):
+def kj_site(slug: str, theme: str | None = None):
     """Serve an auto-generated HTML page for a KJ's business.
 
     This is the public URL that Stripe's business_profile.url points to.
     It shows the KJ's name, bio, venues, and schedule — enough for Stripe
     to verify the business is real.
+
+    Pass ?theme=light for the light-theme variant.
     """
     with db() as conn:
         kj = conn.execute(
@@ -3398,7 +3401,10 @@ def kj_site(slug: str):
             (slug,),
         ).fetchall()
 
-    html_content = _kj_site_html(kj, venues)
+    if theme == "light":
+        html_content = _kj_site_html_light(kj, venues)
+    else:
+        html_content = _kj_site_html(kj, venues)
     return HTMLResponse(content=html_content, media_type="text/html")
 
 
@@ -3472,6 +3478,12 @@ async def kj_subdomain_middleware(request: Request, call_next):
                         (slug,),
                     ).fetchall()
             if kj:
+                theme = request.query_params.get("theme")
+                if theme == "light":
+                    return HTMLResponse(
+                        content=_kj_site_html_light(kj, venues),
+                        media_type="text/html",
+                    )
                 return HTMLResponse(
                     content=_kj_site_html(kj, venues),
                     media_type="text/html",
