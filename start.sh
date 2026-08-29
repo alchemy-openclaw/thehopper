@@ -81,7 +81,7 @@ if [ "$BUILD_MODE" = "true" ]; then
   echo -e "   Open: ${CYAN}http://localhost:$PORT${NC}"
   echo
   cd "$BACKEND_DIR"
-  exec python -m uvicorn main:app --host 0.0.0.0 --port "$PORT"
+  exec python3 -m uvicorn main:app --host 0.0.0.0 --port "$PORT"
 fi
 
 # Dev mode: run Vite (5173) + FastAPI (8000) in parallel
@@ -102,7 +102,7 @@ trap cleanup EXIT INT TERM
 
 # Start FastAPI backend
 cd "$BACKEND_DIR"
-python -m uvicorn main:app --host 0.0.0.0 --port "$PORT" --reload &
+python3 -m uvicorn main:app --host 0.0.0.0 --port "$PORT" --reload &
 API_PID=$!
 
 # Start Vite dev server

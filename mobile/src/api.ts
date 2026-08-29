@@ -23,8 +23,7 @@ import type {
  */
 const API_BASE: string =
   (Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL as string | undefined) ||
-  // EXPO_PUBLIC_* vars are inlined by Metro at build time.
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_URL) ||
+  process.env.EXPO_PUBLIC_API_URL ||
   'http://localhost:8000/api';
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -113,6 +112,20 @@ export const api = {
       body: JSON.stringify({ nickname, message }),
     }),
 
+  sendKJMessage: (venue_id: number, singer_name: string, message: string, song_request?: string, singer_phone?: string) =>
+    jsonFetch<{ id: number; venue_id: number; status: string }>(`${API_BASE}/venues/${venue_id}/message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ singer_name, message, song_request, singer_phone }),
+    }),
+
+  savePatronProfile: (name: string, phone: string) =>
+    jsonFetch<{ id: number; name: string | null; phone: string }>(`${API_BASE}/patrons/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone }),
+    }),
+
   // --- Venue submission (add a karaoke spot) ---
 
   submitVenue: (submission: VenueSubmission) =>
@@ -140,7 +153,7 @@ export const api = {
 
   // --- KJ (Karaoke Jockey) ---
 
-  registerKJ: (data: { name: string; phone: string; bio?: string; instagram?: string; website?: string }) =>
+  registerKJ: (data: { name: string; phone: string; bio?: string; instagram?: string; website?: string; business_name?: string; city?: string }) =>
     jsonFetch<KJ>(`${API_BASE}/kjs/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -160,10 +173,63 @@ export const api = {
 
   getKJVenues: (kj_id: number) => jsonFetch<Venue[]>(`${API_BASE}/kjs/${kj_id}/venues`),
 
-  kjStripeOnboard: (kj_id: number, email: string) =>
-    jsonFetch<StripeOnboardResponse>(
-      `${API_BASE}/kjs/${kj_id}/stripe-onboard?email=${encodeURIComponent(email)}`,
-      { method: 'POST' },
+  updateKJSettings: (kj_id: number, song_request_required: boolean) =>
+    jsonFetch<KJ>(`${API_BASE}/kjs/${kj_id}/settings?song_request_required=${song_request_required}`, {
+      method: 'PATCH',
+    }),
+
+  kjStripeOnboard: (kj_id: number, email: string, kyc?: {
+    business_name?: string;
+    first_name?: string;
+    last_name?: string;
+    dob_day?: number;
+    dob_month?: number;
+    dob_year?: number;
+    address_line1?: string;
+    address_city?: string;
+    address_state?: string;
+    address_postal_code?: string;
+    ssn_last_4?: string;
+  }) => {
+    let url = `${API_BASE}/kjs/${kj_id}/stripe-onboard?email=${encodeURIComponent(email)}`;
+    if (kyc) {
+      const params = new URLSearchParams();
+      if (kyc.business_name) params.set('business_name', kyc.business_name);
+      if (kyc.first_name) params.set('first_name', kyc.first_name);
+      if (kyc.last_name) params.set('last_name', kyc.last_name);
+      if (kyc.dob_day) params.set('dob_day', String(kyc.dob_day));
+      if (kyc.dob_month) params.set('dob_month', String(kyc.dob_month));
+      if (kyc.dob_year) params.set('dob_year', String(kyc.dob_year));
+      if (kyc.address_line1) params.set('address_line1', kyc.address_line1);
+      if (kyc.address_city) params.set('address_city', kyc.address_city);
+      if (kyc.address_state) params.set('address_state', kyc.address_state);
+      if (kyc.address_postal_code) params.set('address_postal_code', kyc.address_postal_code);
+      if (kyc.ssn_last_4) params.set('ssn_last_4', kyc.ssn_last_4);
+      const qs = params.toString();
+      if (qs) url += `&${qs}`;
+    }
+    return jsonFetch<StripeOnboardResponse>(url, { method: 'POST' });
+  },
+
+  kjAddVenue: (kj_id: number, data: {
+    name: string;
+    address: string;
+    city: string;
+    karaoke_nights?: string[];
+    start_time?: string;
+    end_time?: string;
+    phone?: string;
+    website?: string;
+    instagram?: string;
+    vibe?: string;
+  }) =>
+    jsonFetch<{ status: string; venue_id?: number; submission_id?: number; message: string }>(
+      `${API_BASE}/kjs/${kj_id}/venues`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
     ),
 
   kjStripeStatus: (kj_id: number) =>

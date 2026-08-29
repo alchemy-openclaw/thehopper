@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import * as SecureStore from 'expo-secure-store';
-import { api } from '../../src/api';
+import { setItem as secureSet } from '../../src/secure-storage';
+import { api, API_BASE } from '../../src/api';
 import type { KJ } from '../../src/types';
 import {
   Banner,
@@ -43,7 +43,7 @@ export default function AddSpotScreen() {
   const [isKJ, setIsKJ] = useState(false);
   const [kjName, setKJName] = useState('');
   const [submitterPhone, setSubmitterPhone] = useState('');
-  const [kjBio, setKJBio] = useState('');
+  const [kjBio, setKJBio] = useState(''); // kept for profile later, not in form
   const [kjInstagram, setKJInstagram] = useState('');
   const [kjWebsite, setKJWebsite] = useState('');
 
@@ -91,14 +91,21 @@ export default function AddSpotScreen() {
     try {
       const res = await api.verifyPhone(submitterPhone, code);
       if (res.verified && res.token) {
-        await SecureStore.setItemAsync('thehopper_session_token', res.token);
+        await secureSet('thehopper_session_token', res.token);
         setPhoneVerified(true);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Verification failed');
+      setError(e instanceof Error ? e.message : 'Verification failed. Try sending a new code.');
     } finally {
       setVerifying(false);
     }
+  };
+
+  const handleResendCode = async () => {
+    setError(null);
+    setCode('');
+    setCodeSent(false);
+    await handleSendCode();
   };
 
   const handleSubmit = async () => {
@@ -158,7 +165,7 @@ export default function AddSpotScreen() {
       const res = await api.kjStripeOnboard(kjResult.id, email);
       let url = res.onboarding_url;
       if (url.startsWith('/')) {
-        url = `http://localhost:8000${url}`;
+        url = `${API_BASE.replace(/\/api$/, '')}${url}`;
       }
       await WebBrowser.openBrowserAsync(url);
     } catch (e) {
@@ -398,45 +405,21 @@ export default function AddSpotScreen() {
                           style={styles.verifyBtn}
                         />
                       </View>
+                      {error && (
+                        <Button
+                          label="Resend code"
+                          onPress={handleResendCode}
+                          variant="secondary"
+                          style={{ marginTop: 8 }}
+                        />
+                      )}
                     </View>
                   )}
                 </View>
               )}
               {phoneVerified && (
-                <Banner message="✓ Phone verified!" variant="ok" />
+                <Banner message="Phone verified!" variant="ok" />
               )}
-
-              <Text style={styles.fieldLabel}>Bio (optional)</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Rock anthems, crowd work, 10+ years experience..."
-                placeholderTextColor={Colors.textMute}
-                value={kjBio}
-                onChangeText={setKJBio}
-                multiline
-                numberOfLines={3}
-              />
-
-              <Text style={styles.fieldLabel}>Instagram (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="@kj_handle"
-                placeholderTextColor={Colors.textMute}
-                value={kjInstagram}
-                onChangeText={setKJInstagram}
-                autoCapitalize="none"
-              />
-
-              <Text style={styles.fieldLabel}>Website (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="https://..."
-                placeholderTextColor={Colors.textMute}
-                value={kjWebsite}
-                onChangeText={setKJWebsite}
-                keyboardType="url"
-                autoCapitalize="none"
-              />
             </Card>
           </View>
         )}

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Location from 'expo-location';
+import { getGeolocation } from './location';
 import type { UserPrefs } from './types';
 import { DEFAULT_PREFS } from './types';
+
+// Re-export so existing imports from 'prefs' continue to work
+export { getGeolocation };
 
 const KEY = 'thehopper_prefs';
 
@@ -51,21 +54,6 @@ export function usePrefs(): PrefsTuple {
   }, []);
 
   return [prefs, update] as const;
-}
-
-/**
- * Request foreground location permission and return current coords.
- * Mirrors the web app's getGeolocation() helper.
- */
-export async function getGeolocation(): Promise<{ lat: number; lng: number }> {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== 'granted') {
-    throw new Error('Location permission denied. Enter a city or browse all venues.');
-  }
-  const pos = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.Balanced,
-  });
-  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
 }
 
 /** Toggle a song id in the favorites array, returning a new prefs object. */

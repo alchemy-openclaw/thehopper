@@ -4,6 +4,9 @@
  * On first launch, requests permission and registers the push token
  * with the backend. The token is stored in SecureStore for re-use
  * across app launches.
+ *
+ * This is the native implementation. On web, notifications.web.ts
+ * provides no-op stubs (Metro resolves the .web extension automatically).
  */
 
 import * as Notifications from 'expo-notifications';
@@ -11,7 +14,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { api } from './api';
 
-const TOKEN_KEY = 'thehopper_push_token';
+const TOKEN_KEY='thehop...oken';
 
 // Configure how notifications appear when the app is in the foreground
 Notifications.setNotificationHandler({

@@ -11,8 +11,9 @@ import {
   View,
   Alert,
   Linking,
+  Pressable,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { api } from '../../src/api';
 import type { KJ, Venue, StripeStatusResponse } from '../../src/types';
@@ -35,6 +36,8 @@ export default function KJProfileScreen() {
   const [stripeStatus, setStripeStatus] = useState<StripeStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [songRequired, setSongRequired] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     if (!kjId) return;
@@ -47,6 +50,7 @@ export default function KJProfileScreen() {
         setKJ(kjData);
         setVenues(venuesData);
         setStripeStatus(stripeData);
+        setSongRequired(kjData.song_request_required ?? false);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load KJ'))
       .finally(() => setLoading(false));
@@ -54,23 +58,39 @@ export default function KJProfileScreen() {
 
   const handleStripeOnboard = async () => {
     if (!kj) return;
-    Alert.prompt(
-      'Stripe Onboarding',
-      'Enter your email for Stripe:',
-      async (email) => {
-        if (!email) return;
-        try {
-          const res = await api.kjStripeOnboard(kjId, email);
-          let url = res.onboarding_url;
-          if (url.startsWith('/')) {
-            url = `http://localhost:8000${url}`;
-          }
-          await WebBrowser.openBrowserAsync(url);
-        } catch (e) {
-          Alert.alert('Error', e instanceof Error ? e.message : 'Stripe onboarding failed');
-        }
-      },
-    );
+    // Navigate to the onboarding form screen
+    router.push(`/kj/${kjId}/onboard`);
+  };
+
+  const handleViewDashboard = async () => {
+    if (!kj) return;
+    // For existing accounts, the backend generates a fresh link regardless
+    // of the email param (it's only used when creating a new account).
+    try {
+      const res = await api.kjStripeOnboard(kjId, 'existing@account');
+      let url = res.onboarding_url;
+      if (url.startsWith('/')) {
+        url = `https://thehopper.alchemycreativelounge.com${url}`;
+      }
+      await WebBrowser.openBrowserAsync(url);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to open Stripe');
+    }
+  };
+
+  const toggleSongRequired = async () => {
+    const newVal = !songRequired;
+    setSongRequired(newVal);
+    setSavingSettings(true);
+    try {
+      const updated = await api.updateKJSettings(kjId, newVal);
+      setKJ(updated);
+    } catch (e) {
+      setSongRequired(!newVal); // revert on failure
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update settings');
+    } finally {
+      setSavingSettings(false);
+    }
   };
 
   if (loading) return <Loading label="Loading KJ profile..." />;
@@ -126,13 +146,40 @@ export default function KJProfileScreen() {
 
         <Button
           label={stripeReady ? 'View Stripe Dashboard' : 'Set up payments'}
-          onPress={handleStripeOnboard}
+          onPress={stripeReady ? handleViewDashboard : handleStripeOnboard}
           variant={stripeReady ? 'secondary' : 'primary'}
         />
       </Card>
 
+      {/* Preferences */}
+      <Card>
+        <Text style={styles.sectionTitle}>Preferences</Text>
+        <Pressable
+          onPress={toggleSongRequired}
+          disabled={savingSettings}
+          style={styles.toggleRow}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleLabel}>Require song request</Text>
+            <Text style={styles.toggleDesc}>
+              {songRequired
+                ? 'Singers must enter a song when getting in line.'
+                : 'Singers can get in line without picking a song.'}
+            </Text>
+          </View>
+          <View style={[styles.toggleSwitch, songRequired && styles.toggleSwitchOn]}>
+            <View style={[styles.toggleKnob, songRequired && styles.toggleKnobOn]} />
+          </View>
+        </Pressable>
+      </Card>
+
       {/* Venues */}
-      <Text style={styles.sectionLabel}>Venues</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionLabel}>Venues</Text>
+        <Pressable onPress={() => router.push(`/kj/${kjId}/add-venue`)}>
+          <Text style={styles.addLink}>+ add</Text>
+        </Pressable>
+      </View>
       {venues.length === 0 ? (
         <EmptyState icon="📍" message="No venues linked yet" />
       ) : (
@@ -174,9 +221,62 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addLink: {
+    color: Colors.cyan,
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
   noStripe: { color: Colors.textMute, fontSize: 14, marginBottom: Spacing.sm },
   venueName: { fontSize: 18, fontWeight: '700', color: Colors.text },
   venueCity: { fontSize: 14, color: Colors.pink, fontWeight: '600', marginTop: 2 },
   venueMeta: { flexDirection: 'row', flexWrap: 'wrap', marginTop: Spacing.sm },
   venueVibe: { color: Colors.textDim, fontSize: 13, marginTop: Spacing.sm, fontStyle: 'italic' },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  toggleDesc: {
+    fontSize: 13,
+    color: Colors.textMute,
+    marginTop: 2,
+  },
+  toggleSwitch: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.bg2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    justifyContent: 'center',
+    padding: 2,
+  },
+  toggleSwitchOn: {
+    backgroundColor: Colors.cyan,
+    borderColor: 'transparent',
+  },
+  toggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.textMute,
+    alignSelf: 'flex-start',
+  },
+  toggleKnobOn: {
+    backgroundColor: '#fff',
+    alignSelf: 'flex-end',
+  },
 });

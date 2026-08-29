@@ -16,6 +16,7 @@ export interface Venue {
   price_jump_queue: number;
   vibe: string | null;
   distance_miles: number | null;
+  song_request_required: boolean;
 }
 
 export interface Song {
@@ -64,6 +65,8 @@ export interface UserPrefs {
   favorite_artists: string;
   favorite_genres: string;
   favorites: number[]; // song ids
+  singer_name: string;
+  singer_phone: string;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -71,6 +74,8 @@ export const DEFAULT_PREFS: UserPrefs = {
   favorite_artists: '',
   favorite_genres: '',
   favorites: [],
+  singer_name: '',
+  singer_phone: '',
 };
 
 // --- New types for venue submission, KJ, phone verification, devices ---
@@ -108,6 +113,10 @@ export interface KJ {
   stripe_onboarding_status: string;
   verified: boolean;
   created_at: string;
+  business_name?: string | null;
+  site_slug?: string | null;
+  city?: string | null;
+  song_request_required?: boolean;
 }
 
 export interface PhoneVerifyResponse {
