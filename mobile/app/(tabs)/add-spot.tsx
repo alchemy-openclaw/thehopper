@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { setItem as secureSet } from '../../src/secure-storage';
-import { api, API_BASE } from '../../src/api';
+import { getSessionToken, setSessionToken } from '../../src/session';
+import { ApiError, api, API_BASE } from '../../src/api';
 import type { KJ } from '../../src/types';
 import {
   Banner,
@@ -25,6 +25,20 @@ import {
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/**
+ * Mirror of the backend's normalize_phone, used only to decide whether the KJ
+ * actually changed their number. Comparing raw strings would treat
+ * "(321) 555-0100" and "+13215550100" as different and demand a pointless
+ * re-verification of the number already on file.
+ */
+function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  if (digits.startsWith('1') && digits.length > 11) return `+${digits}`;
+  return digits ? `+${digits}` : phone;
+}
 
 export default function AddSpotScreen() {
   // Venue fields
@@ -53,6 +67,17 @@ export default function AddSpotScreen() {
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
 
+  // Existing KJ profile (this device has already onboarded someone). When set,
+  // the KJ block becomes an edit form rather than a verification flow.
+  const [existingKJ, setExistingKJ] = useState<KJ | null>(null);
+  const [lookingUpKJ, setLookingUpKJ] = useState(true);
+  const [sessionToken, setToken] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileNotice, setProfileNotice] = useState<string | null>(null);
+  // Proof the KJ controls the number they are moving to. Required by the API
+  // before an existing profile's phone can be changed.
+  const [newPhoneToken, setNewPhoneToken] = useState<string | null>(null);
+
   // Submission
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,10 +86,123 @@ export default function AddSpotScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
 
+  // Resolve whether this device already belongs to an onboarded KJ. A 404 just
+  // means "not a KJ yet"; a 401 means the stored token aged out, and both fall
+  // back to the normal verification flow rather than surfacing an error.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const token = await getSessionToken();
+      if (cancelled) return;
+      setToken(token);
+      if (!token) {
+        setLookingUpKJ(false);
+        return;
+      }
+      try {
+        const kj = await api.getMyKJ(token);
+        if (cancelled) return;
+        setExistingKJ(kj);
+        setKJName(kj.name);
+        setSubmitterPhone(kj.phone);
+        setPhoneVerified(true);
+      } catch (e) {
+        if (cancelled) return;
+        // 401 → token expired, so it cannot authorise edits either.
+        if (e instanceof ApiError && e.status === 401) setToken(null);
+      } finally {
+        if (!cancelled) setLookingUpKJ(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const toggleNight = (day: string) => {
     setNights((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
     );
+  };
+
+  // True once the KJ has typed a number different from the one on file.
+  const phoneChanged =
+    existingKJ != null &&
+    normalizePhone(submitterPhone) !== normalizePhone(existingKJ.phone);
+
+  const handleSendNewPhoneCode = async () => {
+    if (!submitterPhone.trim()) {
+      setError('Enter the new phone number first');
+      return;
+    }
+    setError(null);
+    setProfileNotice(null);
+    try {
+      await api.sendPhoneCode(submitterPhone);
+      setCodeSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to send code');
+    }
+  };
+
+  const handleVerifyNewPhone = async () => {
+    if (!code.trim()) {
+      setError('Enter the 6-digit code');
+      return;
+    }
+    setError(null);
+    setVerifying(true);
+    try {
+      const res = await api.verifyPhone(submitterPhone, code);
+      if (res.verified && res.token) {
+        setNewPhoneToken(res.token);
+        setCodeSent(false);
+        setCode('');
+        setProfileNotice('New number verified — save to apply it.');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Verification failed. Try sending a new code.');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!existingKJ || !sessionToken) return;
+    if (!kjName.trim()) {
+      setError('Stage name cannot be empty');
+      return;
+    }
+    if (phoneChanged && !newPhoneToken) {
+      setError('Verify the new number before saving');
+      return;
+    }
+    setError(null);
+    setProfileNotice(null);
+    setSavingProfile(true);
+    try {
+      const updated = await api.updateKJProfile(existingKJ.id, sessionToken, {
+        name: kjName.trim(),
+        ...(phoneChanged
+          ? { phone: submitterPhone.trim(), new_phone_token: newPhoneToken! }
+          : {}),
+      });
+      setExistingKJ(updated);
+      setKJName(updated.name);
+      setSubmitterPhone(updated.phone);
+      // Moving the number invalidates the old token server-side; the one that
+      // proved the new number becomes this device's session.
+      if (phoneChanged && newPhoneToken) {
+        await setSessionToken(newPhoneToken);
+        setToken(newPhoneToken);
+      }
+      setNewPhoneToken(null);
+      setProfileNotice('Profile updated.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save your profile');
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleSendCode = async () => {
@@ -91,7 +229,8 @@ export default function AddSpotScreen() {
     try {
       const res = await api.verifyPhone(submitterPhone, code);
       if (res.verified && res.token) {
-        await secureSet('thehopper_session_token', res.token);
+        await setSessionToken(res.token);
+        setToken(res.token);
         setPhoneVerified(true);
       }
     } catch (e) {
@@ -127,18 +266,31 @@ export default function AddSpotScreen() {
         karaoke_nights: nights,
         start_time: startTime,
         end_time: endTime,
-        kj_name: isKJ ? kjName.trim() : undefined,
+        // For a returning KJ use the values actually saved on the profile, not
+        // whatever is currently typed — an unsaved phone edit has not been
+        // verified, and must not ride along on the venue submission.
+        kj_name: isKJ ? (existingKJ ? existingKJ.name : kjName.trim()) : undefined,
         phone: phone.trim() || undefined,
         website: website.trim() || undefined,
         instagram: instagram.trim() || undefined,
         vibe: vibe.trim() || undefined,
         is_kj: isKJ,
-        submitter_phone: isKJ ? submitterPhone.trim() : undefined,
+        submitter_phone: isKJ
+          ? (existingKJ ? existingKJ.phone : submitterPhone.trim())
+          : undefined,
       });
       setSuccess(res.message);
 
-      // If KJ, register them
-      if (isKJ && phoneVerified) {
+      // If KJ, register them. A returning KJ is already registered — sending
+      // them through /kjs/register again would just re-upsert the row, and
+      // pushing an already-connected KJ back into Stripe onboarding is wrong,
+      // so only surface that step when they still need it.
+      if (isKJ && existingKJ) {
+        const connected =
+          existingKJ.stripe_onboarding_status === 'active' ||
+          existingKJ.stripe_onboarding_status === 'pending_verification';
+        if (!connected) setKJResult(existingKJ);
+      } else if (isKJ && phoneVerified) {
         try {
           const kj = await api.registerKJ({
             name: kjName.trim() || name.trim(),
@@ -291,7 +443,7 @@ export default function AddSpotScreen() {
             </View>
           </View>
 
-          <Text style={styles.fieldLabel}>Venue phone (optional)</Text>
+          <Text style={styles.fieldLabel}>Venue Contact Phone (optional)</Text>
           <TextInput
             style={styles.input}
             placeholder="(321) 555-0100"
@@ -353,7 +505,106 @@ export default function AddSpotScreen() {
         </Card>
 
         {/* KJ fields */}
-        {isKJ && (
+        {isKJ && lookingUpKJ && <Loading label="Checking your KJ profile..." />}
+
+        {/* Returning KJ — show what we have on file and let them edit it. */}
+        {isKJ && !lookingUpKJ && existingKJ && (
+          <View>
+            <Text style={styles.sectionLabel}>Your KJ Profile</Text>
+            <Card>
+              <Text style={styles.profileHint}>
+                You're already onboarded as a KJ. Update your details below.
+              </Text>
+
+              <Text style={styles.fieldLabel}>Your name / stage name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="DJ Salty Mike"
+                placeholderTextColor={Colors.textMute}
+                value={kjName}
+                onChangeText={(v) => {
+                  setKJName(v);
+                  setProfileNotice(null);
+                }}
+              />
+
+              <Text style={styles.fieldLabel}>Your phone number</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="(321) 555-0100"
+                placeholderTextColor={Colors.textMute}
+                value={submitterPhone}
+                onChangeText={(v) => {
+                  setSubmitterPhone(v);
+                  setProfileNotice(null);
+                  // Any further edit invalidates a code already sent or a
+                  // number already proved.
+                  setNewPhoneToken(null);
+                  setCodeSent(false);
+                  setCode('');
+                }}
+                keyboardType="phone-pad"
+              />
+
+              {/* Changing the number re-keys the account, so prove the new one. */}
+              {phoneChanged && !newPhoneToken && (
+                <View style={styles.verifyBlock}>
+                  {!codeSent ? (
+                    <>
+                      <Text style={styles.profileHint}>
+                        Changing your number needs a quick text to confirm it's yours.
+                      </Text>
+                      <Button
+                        label="Send code to new number"
+                        onPress={handleSendNewPhoneCode}
+                        variant="secondary"
+                      />
+                    </>
+                  ) : (
+                    <View>
+                      <Text style={styles.fieldLabel}>Enter the code we sent you</Text>
+                      <View style={styles.codeRow}>
+                        <TextInput
+                          style={[styles.input, { flex: 1 }]}
+                          placeholder="123456"
+                          placeholderTextColor={Colors.textMute}
+                          value={code}
+                          onChangeText={setCode}
+                          keyboardType="number-pad"
+                          maxLength={6}
+                        />
+                        <Button
+                          label={verifying ? '...' : 'Verify'}
+                          onPress={handleVerifyNewPhone}
+                          variant="cyan"
+                          style={styles.verifyBtn}
+                        />
+                      </View>
+                      <Button
+                        label="Resend code"
+                        onPress={handleSendNewPhoneCode}
+                        variant="secondary"
+                        style={{ marginTop: 8 }}
+                      />
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {profileNotice && <Banner message={profileNotice} variant="ok" />}
+
+              <Button
+                label={savingProfile ? 'Saving...' : 'Save changes'}
+                onPress={handleSaveProfile}
+                disabled={savingProfile || (phoneChanged && !newPhoneToken)}
+                style={{ marginTop: Spacing.md }}
+              />
+            </Card>
+          </View>
+        )}
+
+        {/* New KJ — the original verification flow. */}
+        {isKJ && !lookingUpKJ && !existingKJ && (
           <View>
             <Text style={styles.sectionLabel}>KJ Onboarding</Text>
             <Card>
@@ -558,6 +809,12 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   toggleTitle: { fontSize: 18, fontWeight: '800', color: Colors.text },
   toggleSub: { fontSize: 13, color: Colors.textDim, marginTop: 2 },
+  profileHint: {
+    color: Colors.textDim,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: Spacing.sm,
+  },
   verifyBlock: { marginTop: Spacing.sm },
   codeRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
   verifyBtn: { minWidth: 100 },

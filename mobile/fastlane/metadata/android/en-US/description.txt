@@ -7,7 +7,7 @@ Discover karaoke nights at venues near you with location-based search. See who's
 Enter your vocal range (bass, baritone, tenor, alto, mezzo, soprano) and your favorite artists. TheHopper's smart matching algorithm suggests songs that fit your voice and style — so you always sound your best.
 
 ⚡ SKIP THE QUEUE
-Want to sing next? Pay your KJ (karaoke host) directly through the app to jump the queue. Secure Stripe checkout, no cash needed. Support your local KJ while getting your moment in the spotlight.
+Want to sing soon? Pay your KJ (karaoke host) directly through the app to jump the queue. Secure Stripe checkout, no cash needed. Support your local KJ while getting your moment in the spotlight.
 
 ⭐ SAVE YOUR FAVORITES
 Build your personal songbook. Save songs you love, track what you've sung, and get better suggestions over time. No login required — everything saves right on your device.

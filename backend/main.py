@@ -32,7 +32,7 @@ from urllib.parse import urlencode
 from urllib.request import Request as UrllibRequest, urlopen
 
 import stripe
-from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -227,6 +227,17 @@ def init_db() -> None:
                 phone           TEXT NOT NULL,
                 code            TEXT NOT NULL,
                 verified        INTEGER NOT NULL DEFAULT 0,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at      TEXT NOT NULL
+            );
+
+            -- Session tokens minted by /phone/verify. Until this table existed
+            -- the token was generated, returned, and immediately forgotten, so
+            -- nothing could act on it. Possession of a row here is the proof
+            -- that a caller controls `phone`.
+            CREATE TABLE IF NOT EXISTS phone_sessions (
+                token           TEXT PRIMARY KEY,
+                phone           TEXT NOT NULL,
                 created_at      TEXT NOT NULL DEFAULT (datetime('now')),
                 expires_at      TEXT NOT NULL
             );
@@ -606,6 +617,32 @@ def generate_code() -> str:
     return "".join(random.choices(string.digits, k=6))
 
 
+# How long a token from /phone/verify stays usable. Long enough that a KJ who
+# onboarded weeks ago can still edit their profile without re-verifying.
+PHONE_SESSION_TTL_SECONDS = 30 * 24 * 3600
+
+
+def phone_for_token(conn: sqlite3.Connection, token: str | None) -> str | None:
+    """Return the phone a session token proves ownership of, or None.
+
+    None covers every failure the caller should treat identically: no token,
+    unknown token, or expired token.
+    """
+    if not token:
+        return None
+    row = conn.execute(
+        "SELECT phone, expires_at FROM phone_sessions WHERE token=?", (token,)
+    ).fetchone()
+    if not row:
+        return None
+    try:
+        if float(row["expires_at"]) < time.time():
+            return None
+    except (TypeError, ValueError):
+        return None
+    return row["phone"]
+
+
 def slugify(text: str) -> str:
     """Convert text to a URL-safe slug."""
     import re
@@ -870,6 +907,17 @@ class KJOut(BaseModel):
     site_slug: str | None = None
     city: str | None = None
     song_request_required: bool = False
+
+
+class KJProfileUpdateRequest(BaseModel):
+    """Edit a KJ's stage name and/or phone number.
+
+    Changing `phone` re-keys the account, so it additionally requires
+    `new_phone_token` — a token from /phone/verify for the *new* number.
+    """
+    name: str | None = None
+    phone: str | None = None
+    new_phone_token: str | None = None
 
 
 class KJLinkVenueRequest(BaseModel):
@@ -2433,9 +2481,12 @@ def send_phone_code(req: PhoneSendCodeRequest):
     expires = time.time() + 600  # 10 minutes
 
     with db() as conn:
-        # Invalidate any previous codes for this phone
+        # Invalidate any previous codes for this phone by expiring them. Do NOT
+        # mark them verified=1 to retire them: that made "verified" mean either
+        # "the caller proved ownership" or "we superseded this row", so a second
+        # send-code call would leave a verified row for a number nobody proved.
         conn.execute(
-            "UPDATE phone_verifications SET verified=1 WHERE phone=? AND verified=0",
+            "UPDATE phone_verifications SET expires_at='0' WHERE phone=? AND verified=0",
             (phone,),
         )
         conn.execute(
@@ -2466,8 +2517,14 @@ def verify_phone(req: PhoneVerifyRequest):
             raise HTTPException(status_code=400, detail="Code expired. Request a new one.")
         conn.execute("UPDATE phone_verifications SET verified=1 WHERE id=?", (row["id"],))
 
-    # Generate a session token (hash of phone + timestamp)
-    token = secrets.token_hex(16)
+        # Mint a session token and persist it, so later requests can prove the
+        # caller controls this number.
+        token = secrets.token_hex(16)
+        conn.execute(
+            "INSERT INTO phone_sessions (token, phone, expires_at) VALUES (?,?,?)",
+            (token, phone, str(time.time() + PHONE_SESSION_TTL_SECONDS)),
+        )
+
     return PhoneVerifyResponse(verified=True, token=token)
 
 
@@ -2511,6 +2568,85 @@ def register_kj(req: KJRegisterRequest):
             )
             row = conn.execute("SELECT * FROM kjs WHERE id=?", (cur.lastrowid,)).fetchone()
     return _kj_row_to_out(row)
+
+
+# NOTE: must be declared before /kjs/{kj_id} — that route types kj_id as int,
+# so "me" would fail parsing with a 422 rather than falling through to here.
+@app.get(f"{API_PREFIX}/kjs/me", response_model=KJOut)
+def get_my_kj(x_session_token: str | None = Header(default=None)):
+    """Return the KJ owned by the caller's verified phone number.
+
+    404 when the number has never been onboarded as a KJ — that is the normal
+    "new KJ" case, not an error.
+    """
+    with db() as conn:
+        phone = phone_for_token(conn, x_session_token)
+        if not phone:
+            raise HTTPException(status_code=401, detail="Verify your phone number")
+        row = conn.execute("SELECT * FROM kjs WHERE phone=?", (phone,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="No KJ profile for this number")
+    return _kj_row_to_out(row)
+
+
+@app.patch(f"{API_PREFIX}/kjs/{{kj_id}}/profile", response_model=KJOut)
+def update_kj_profile(kj_id: int, req: KJProfileUpdateRequest,
+                      x_session_token: str | None = Header(default=None)):
+    """Edit a KJ's stage name and/or phone number.
+
+    Two separate proofs are required to move a number, because either one alone
+    is an account-takeover path:
+      - X-Session-Token must match the KJ's *current* phone. Without it, anyone
+        who guessed a kj_id could repoint someone else's account at themselves.
+      - new_phone_token must match the *new* phone. Without it, a KJ could
+        claim a number they do not control and capture its SMS notifications.
+    """
+    with db() as conn:
+        row = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="KJ not found")
+
+        caller_phone = phone_for_token(conn, x_session_token)
+        if not caller_phone or caller_phone != row["phone"]:
+            raise HTTPException(status_code=401, detail="Verify your phone number")
+
+        new_name = req.name.strip() if req.name is not None else None
+        if new_name is not None and not new_name:
+            raise HTTPException(status_code=400, detail="Stage name cannot be empty")
+
+        new_phone = normalize_phone(req.phone) if req.phone else None
+        if new_phone and new_phone != row["phone"]:
+            proven = phone_for_token(conn, req.new_phone_token)
+            if proven != new_phone:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Verify the new phone number before changing it",
+                )
+            clash = conn.execute(
+                "SELECT id FROM kjs WHERE phone=? AND id!=?", (new_phone, kj_id)
+            ).fetchone()
+            if clash:
+                raise HTTPException(
+                    status_code=409,
+                    detail="That number already belongs to another KJ profile",
+                )
+        else:
+            new_phone = None
+
+        if new_name is not None:
+            conn.execute("UPDATE kjs SET name=? WHERE id=?", (new_name, kj_id))
+        if new_phone:
+            conn.execute("UPDATE kjs SET phone=? WHERE id=?", (new_phone, kj_id))
+            # Push notifications are routed by phone, so move the device rows
+            # too or the KJ silently stops receiving alerts.
+            conn.execute(
+                "UPDATE devices SET phone=? WHERE phone=?", (new_phone, row["phone"])
+            )
+            # The old number must no longer authenticate this account.
+            conn.execute("DELETE FROM phone_sessions WHERE phone=?", (row["phone"],))
+
+        updated = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
+    return _kj_row_to_out(updated)
 
 
 @app.get(f"{API_PREFIX}/kjs/{{kj_id}}", response_model=KJOut)

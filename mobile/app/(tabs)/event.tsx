@@ -133,7 +133,7 @@ export default function EventScreen() {
               style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnLineup, pressed && styles.subtleBtnPressed]}
             >
               <Text style={styles.subtleBtnText}>
-                🎤 Get In Line
+                Get In Line
               </Text>
             </Pressable>
             <Pressable
@@ -141,7 +141,7 @@ export default function EventScreen() {
               style={({ pressed }) => [styles.subtleBtn, pressed && styles.subtleBtnPressed]}
             >
               <Text style={styles.subtleBtnText}>
-                ⏭️ Jump Queue · ${venue.price_jump_queue.toFixed(2)}
+                Skip The Line · ${venue.price_jump_queue.toFixed(2)}
               </Text>
             </Pressable>
             <Pressable
@@ -149,7 +149,7 @@ export default function EventScreen() {
               style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnTip, pressed && styles.subtleBtnPressed]}
             >
               <Text style={styles.subtleBtnText}>
-                💰 Tip KJ
+                Tip KJ
               </Text>
             </Pressable>
           </View>
@@ -470,7 +470,7 @@ function PaymentModal({
           </Text>
           <View style={styles.priceDisplay}>
             <Text style={styles.priceAmount}>${venue.price_jump_queue.toFixed(2)}</Text>
-            <Text style={styles.priceLabel}> to sing next</Text>
+            <Text style={styles.priceLabel}> to sing soon</Text>
           </View>
 
           {!stripeConfigured && (
@@ -506,7 +506,7 @@ function PaymentModal({
             label={
               submitting
                 ? 'Creating checkout…'
-                : `Pay $${venue.price_jump_queue.toFixed(2)} & jump queue`
+                : `Pay $${venue.price_jump_queue.toFixed(2)} & skip line`
             }
             onPress={submit}
             disabled={submitting}

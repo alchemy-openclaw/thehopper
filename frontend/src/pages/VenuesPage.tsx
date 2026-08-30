@@ -69,7 +69,7 @@ export default function VenuesPage({ config }: Props) {
     <div>
       <div className="card" style={{ marginBottom: 12 }}>
         <button className="btn" onClick={handleLocate} disabled={loading}>
-          📍 Find karaoke near me
+          Find karaoke near me
         </button>
         <form
           onSubmit={handleCitySearch}

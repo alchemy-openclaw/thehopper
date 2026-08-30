@@ -96,7 +96,7 @@ export default function VenuesScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <Card style={styles.searchCard}>
-        <Button label="📍 Find karaoke near me" onPress={handleLocate} disabled={loading} />
+        <Button label="Find karaoke near me" onPress={handleLocate} disabled={loading} />
         <View style={styles.cityRow}>
           <TextInput
             style={styles.input}

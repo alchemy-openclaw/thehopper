@@ -17,14 +17,35 @@ import type {
 
 /**
  * API base URL.
- * - Reads EXPO_PUBLIC_API_URL from environment (.env or host env).
+ * - Reads EXPO_PUBLIC_API_URL from environment (.env or host env) first, so a
+ *   developer can point at a test backend without editing app.json. The
+ *   production backend runs live Stripe keys, so this override is the only
+ *   thing standing between a local run and a real card charge.
+ * - Falls back to app.json `extra` (the value baked into EAS builds).
  * - Falls back to localhost for development.
  * - On a physical device, set EXPO_PUBLIC_API_URL to your computer's LAN IP.
  */
 const API_BASE: string =
-  (Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL as string | undefined) ||
   process.env.EXPO_PUBLIC_API_URL ||
+  (Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL as string | undefined) ||
   'http://localhost:8000/api';
+
+/**
+ * An HTTP error carrying its status code.
+ *
+ * Callers need the code, not just the message: a 404 from /kjs/me means "not a
+ * KJ yet" (a normal state) while a 401 means "re-verify", and the two lead to
+ * completely different UI.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -36,7 +57,7 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
     } catch {
       /* ignore */
     }
-    throw new Error(detail);
+    throw new ApiError(res.status, detail);
   }
   return res.json() as Promise<T>;
 }
@@ -157,6 +178,34 @@ export const api = {
     jsonFetch<KJ>(`${API_BASE}/kjs/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * The KJ profile belonging to the caller's verified number.
+   * Throws with status 404 when the number has never onboarded as a KJ, and
+   * 401 when the token is missing/expired — callers must distinguish the two.
+   */
+  getMyKJ: (session_token: string) =>
+    jsonFetch<KJ>(`${API_BASE}/kjs/me`, {
+      headers: { 'X-Session-Token': session_token },
+    }),
+
+  /**
+   * Edit stage name and/or phone. Moving the number additionally requires
+   * `new_phone_token` — a token from verifying the *new* number.
+   */
+  updateKJProfile: (
+    kj_id: number,
+    session_token: string,
+    data: { name?: string; phone?: string; new_phone_token?: string },
+  ) =>
+    jsonFetch<KJ>(`${API_BASE}/kjs/${kj_id}/profile`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Session-Token': session_token,
+      },
       body: JSON.stringify(data),
     }),
 
