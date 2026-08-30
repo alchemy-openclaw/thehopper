@@ -50,7 +50,7 @@ export default function App() {
         </div>
         <div>
           <h1>KaraokeSpot</h1>
-          <div className="tag">Brevard karaoke companion</div>
+          <div className="tag">Your karaoke companion</div>
         </div>
       </header>
 
@@ -89,7 +89,7 @@ export default function App() {
       {/* The old footer linked to Stripe's test-mode docs, which is wrong now
           that this runs against live keys — real cards are charged here. */}
       <footer className="footer">
-        KaraokeSpot · Made for Brevard County karaoke ·{' '}
+        KaraokeSpot · Find your stage ·{' '}
         <a href="/privacy">Privacy</a> · <a href="/support">Support</a>
       </footer>
     </div>

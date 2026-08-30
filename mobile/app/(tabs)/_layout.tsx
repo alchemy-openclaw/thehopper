@@ -1,8 +1,11 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/theme';
+import { useKJContext } from '../../src/kj-context';
 
 export default function TabsLayout() {
+  const { kj } = useKJContext();
+
   return (
     <Tabs
       screenOptions={{
@@ -64,6 +67,20 @@ export default function TabsLayout() {
           tabBarLabel: 'Add',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="add-circle" color={color} size={size} />
+          ),
+        }}
+      />
+      {/* Hosts only. href: null keeps the route registered but hides the tab,
+          so singers never see it and the pending-singers list stays one tap
+          away for a KJ running a night. */}
+      <Tabs.Screen
+        name="kj"
+        options={{
+          title: 'My KJ',
+          tabBarLabel: 'My KJ',
+          href: kj ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="mic" color={color} size={size} />
           ),
         }}
       />

@@ -17,6 +17,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { api } from '../../src/api';
 import { getSessionToken } from '../../src/session';
+import { pickLineupVenue } from '../../src/event-window';
 import type { KJ, LineupEntry, Venue, StripeStatusResponse } from '../../src/types';
 import {
   Banner,
@@ -28,9 +29,14 @@ import {
 } from '../../src/components';
 import { Colors, Spacing, Typography } from '../../src/theme';
 
-export default function KJProfileScreen() {
+/**
+ * Renders the KJ dashboard. Normally driven by the /kj/[id] route, but the
+ * "My KJ" tab renders this same component with an explicit id so hosts get the
+ * dashboard inside the tab bar rather than being bounced out to a stack screen.
+ */
+export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: number } = {}) {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const kjId = parseInt(id, 10);
+  const kjId = kjIdOverride ?? parseInt(id, 10);
 
   const [kj, setKJ] = useState<KJ | null>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -40,9 +46,9 @@ export default function KJProfileScreen() {
   const [songRequired, setSongRequired] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // Pending singers for the KJ's first venue. A KJ hosting several venues runs
-  // one night at a time, so this shows the venue they are most likely at rather
-  // than inventing a venue switcher before there is demand for one.
+  // Pending singers for whichever venue is on right now, or starting within the
+  // hour. Simultaneous locations are a later problem — picking by the clock is
+  // right in practice and avoids a venue switcher for now.
   const [lineup, setLineup] = useState<LineupEntry[]>([]);
   const [lineupVenue, setLineupVenue] = useState<Venue | null>(null);
   const [lineupLoading, setLineupLoading] = useState(false);
@@ -61,7 +67,7 @@ export default function KJProfileScreen() {
         setVenues(venuesData);
         setStripeStatus(stripeData);
         setSongRequired(kjData.song_request_required ?? false);
-        if (venuesData.length > 0) setLineupVenue(venuesData[0]);
+        setLineupVenue(pickLineupVenue(venuesData));
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load KJ'))
       .finally(() => setLoading(false));
@@ -197,16 +203,28 @@ export default function KJProfileScreen() {
       {/* Pending singers. Not an ordered queue — the KJ runs the rotation
           themselves; this just shows who is waiting and lets them call
           someone up. */}
-      {lineupVenue && (
+      {venues.length > 0 && (
         <Card>
           <View style={styles.lineupHeader}>
             <Text style={styles.sectionTitle}>Pending Singers</Text>
-            <Pressable onPress={refreshLineup} hitSlop={10}>
-              <Text style={styles.refreshLink}>
-                {lineupLoading ? 'Refreshing…' : 'Refresh'}
-              </Text>
-            </Pressable>
+            {lineupVenue && (
+              <Pressable onPress={refreshLineup} hitSlop={10}>
+                <Text style={styles.refreshLink}>
+                  {lineupLoading ? 'Refreshing…' : 'Refresh'}
+                </Text>
+              </Pressable>
+            )}
           </View>
+
+          {!lineupVenue ? (
+            // Say so plainly rather than hiding the card — a host opening the
+            // app mid-afternoon should not be left wondering where it went.
+            <Text style={styles.lineupEmpty}>
+              No night running right now. Your lineup appears here when one of
+              your venues starts, from an hour beforehand.
+            </Text>
+          ) : (
+            <>
           <Text style={styles.lineupVenueName}>{lineupVenue.name}</Text>
 
           {lineupError && <Banner message={`⚠️ ${lineupError}`} variant="warn" />}
@@ -252,6 +270,8 @@ export default function KJProfileScreen() {
                 </View>
               </View>
             ))
+          )}
+            </>
           )}
         </Card>
       )}

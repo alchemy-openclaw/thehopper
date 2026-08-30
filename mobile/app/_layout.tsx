@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Colors } from '../src/theme';
 import { PrefsProvider } from '../src/prefs-context';
 import { VenueProvider } from '../src/venue-context';
+import { KJProvider } from '../src/kj-context';
 import { registerForPushNotifications } from '../src/notifications';
 
 export default function RootLayout() {
@@ -16,15 +17,17 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.bg }}>
       <PrefsProvider>
         <VenueProvider>
-          <StatusBar style="light" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: Colors.bg },
-            }}
-          >
-            <Stack.Screen name="(tabs)" />
-          </Stack>
+          <KJProvider>
+            <StatusBar style="light" />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: Colors.bg },
+              }}
+            >
+              <Stack.Screen name="(tabs)" />
+            </Stack>
+          </KJProvider>
         </VenueProvider>
       </PrefsProvider>
     </GestureHandlerRootView>

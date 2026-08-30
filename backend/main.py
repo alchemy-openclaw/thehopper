@@ -1,8 +1,8 @@
-"""TheHopper — Karaoke companion app backend.
+"""KaraokeSpot — Karaoke companion app backend.
 
 FastAPI app providing:
-  - Venues (Brevard County, FL) sorted by geolocation
-  - Songs catalog (50+ karaoke songs with range/difficulty metadata)
+  - Venues sorted by geolocation
+  - Songs catalog (range/difficulty metadata)
   - Song suggestions matching user vocal range + favorite artists/genres
   - KJ messaging (singers can leave a message for the karaoke host)
   - Stripe Checkout for reserving a "premium slot" (preferred singing time

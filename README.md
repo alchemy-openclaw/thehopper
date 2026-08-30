@@ -1,6 +1,6 @@
 # 🎤 TheHopper
 
-**Karaoke companion app for Brevard County, FL.**
+**Karaoke companion app — find karaoke nights, pick songs, and run the lineup.**
 
 Find karaoke near you, get song suggestions that fit your voice, and pay to jump the queue — all from your phone, no login required.
 

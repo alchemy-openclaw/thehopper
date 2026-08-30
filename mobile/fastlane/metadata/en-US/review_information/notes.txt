@@ -3,9 +3,13 @@ and lets the karaoke host (KJ) running that night manage the lineup.
 
 BROWSING — no account needed
 Finding venues, browsing the song catalog, and saving favorites all work
-anonymously. Grant location permission to see venues sorted by distance. The
-app is seeded with venues in Brevard County, FL, so please allow location or
-the venue list may appear empty.
+anonymously. Grant location permission to see venues sorted by distance.
+
+Venue coverage is limited during early access, so depending on where you are
+testing the nearby list may be sparse or empty. That is expected, not a
+failure. Email the support address below and we will add a venue at your
+location so you can review the full flow, or search the song catalog — which
+holds tens of thousands of tracks — to exercise the app without one.
 
 PAYMENTS — real-world services at a physical venue
 Payments are for services delivered in person at a bar or venue on the night:

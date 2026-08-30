@@ -14,7 +14,8 @@ import {
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { getSessionToken, setSessionToken } from '../../src/session';
-import { ApiError, api, API_BASE } from '../../src/api';
+import { api, API_BASE } from '../../src/api';
+import { useKJContext } from '../../src/kj-context';
 import type { KJ } from '../../src/types';
 import {
   Banner,
@@ -70,6 +71,7 @@ export default function AddSpotScreen() {
   // Existing KJ profile (this device has already onboarded someone). When set,
   // the KJ block becomes an edit form rather than a verification flow.
   const [existingKJ, setExistingKJ] = useState<KJ | null>(null);
+  const { kj: contextKJ, loading: kjLoading, setKJ: setContextKJ } = useKJContext();
   const [lookingUpKJ, setLookingUpKJ] = useState(true);
   const [sessionToken, setToken] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -86,37 +88,23 @@ export default function AddSpotScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
 
-  // Resolve whether this device already belongs to an onboarded KJ. A 404 just
-  // means "not a KJ yet"; a 401 means the stored token aged out, and both fall
-  // back to the normal verification flow rather than surfacing an error.
+  // Whether this device already belongs to an onboarded KJ comes from the
+  // shared context — the provider resolves it once at startup, so this screen
+  // does not repeat the lookup. Prefill the edit fields when it arrives.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const token = await getSessionToken();
-      if (cancelled) return;
-      setToken(token);
-      if (!token) {
-        setLookingUpKJ(false);
-        return;
-      }
-      try {
-        const kj = await api.getMyKJ(token);
-        if (cancelled) return;
-        setExistingKJ(kj);
-        setKJName(kj.name);
-        setSubmitterPhone(kj.phone);
-        setPhoneVerified(true);
-      } catch (e) {
-        if (cancelled) return;
-        // 401 → token expired, so it cannot authorise edits either.
-        if (e instanceof ApiError && e.status === 401) setToken(null);
-      } finally {
-        if (!cancelled) setLookingUpKJ(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    if (kjLoading) return;
+    setLookingUpKJ(false);
+    if (contextKJ) {
+      setExistingKJ(contextKJ);
+      setKJName(contextKJ.name);
+      setSubmitterPhone(contextKJ.phone);
+      setPhoneVerified(true);
+    }
+  }, [contextKJ, kjLoading]);
+
+  // The session token authorises profile edits, so it is still read directly.
+  useEffect(() => {
+    getSessionToken().then(setToken).catch(() => setToken(null));
   }, []);
 
   const toggleNight = (day: string) => {
@@ -188,6 +176,7 @@ export default function AddSpotScreen() {
           : {}),
       });
       setExistingKJ(updated);
+      setContextKJ(updated); // keep the My KJ tab in step with the edit
       setKJName(updated.name);
       setSubmitterPhone(updated.phone);
       // Moving the number invalidates the old token server-side; the one that
@@ -300,6 +289,9 @@ export default function AddSpotScreen() {
             website: kjWebsite.trim() || undefined,
           });
           setKJResult(kj);
+          // Reveals the My KJ tab straight away — without this a brand new
+          // host would have to restart the app to find their dashboard.
+          setContextKJ(kj);
         } catch {
           // KJ registration failed but venue submission went through
         }
@@ -343,7 +335,9 @@ export default function AddSpotScreen() {
       <KJOnboardingResult
         kj={kjResult}
         onStripeOnboard={handleStripeOnboard}
-        onDone={() => router.push('/(tabs)/index')}
+        // Land a new host on their own dashboard rather than the venue list —
+        // that is where the pending singers list lives.
+        onDone={() => router.push('/(tabs)/kj')}
       />
     );
   }
