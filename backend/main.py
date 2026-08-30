@@ -38,6 +38,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from legal_pages import privacy_html, support_html
 from seed_data import SONGS, VENUES
 from stripe_connect import ConnectManager, ConnectAccount
 from kj_site_light import _kj_site_html_light
@@ -72,6 +73,11 @@ stripe.api_key = STRIPE_SECRET_KEY
 
 # KJ business site domain — slug.karaokespot.us serves auto-generated pages
 KARAOKESPOT_DOMAIN = "karaokespot.us"
+
+# Custom URL scheme the mobile app registers. Stripe Checkout redirects back
+# through it, so this MUST stay in lockstep with `scheme` in mobile/app.json —
+# a mismatch strands the customer on a dead page after they have paid.
+APP_URL_SCHEME = "karaokespot"
 
 # True when we are pointed at Stripe's live environment (real money).
 STRIPE_LIVE_MODE = STRIPE_SECRET_KEY.startswith("sk_live_")
@@ -252,6 +258,27 @@ def init_db() -> None:
                 created_at      TEXT NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (kj_id) REFERENCES kjs(id)
             );
+
+            -- Singers waiting to sing at a venue. Deliberately a flat pending
+            -- list rather than an ordered queue: the KJ runs the real rotation
+            -- off their own screen, and this only needs to be good enough for
+            -- them to see who is waiting and tap to call someone up. Ordering
+            -- and realtime position are a later version.
+            --
+            -- push_token is captured at join time because a singer's device row
+            -- has no phone attached, so there is no other way to reach them.
+            CREATE TABLE IF NOT EXISTS lineup (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                venue_id        INTEGER NOT NULL,
+                singer_name     TEXT NOT NULL,
+                singer_phone    TEXT,
+                song_request    TEXT,
+                push_token      TEXT,
+                status          TEXT NOT NULL DEFAULT 'pending',  -- pending|notified|done
+                created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                notified_at     TEXT,
+                FOREIGN KEY (venue_id) REFERENCES venues(id)
+            );
             """
         )
 
@@ -294,6 +321,22 @@ def init_db() -> None:
                 "UPDATE venues SET premium_slot_price = price_jump_queue "
                 "WHERE premium_slot_price = 5.0 AND price_jump_queue != 5.0"
             )
+
+        # ------------------------------------------------------------------
+        # Migration: standardise prices on whole dollars
+        #
+        # The columns stay REAL for compatibility, but every price is rounded
+        # to a whole dollar so what we charge matches what the apps display.
+        # Idempotent — rounding an already-round value is a no-op.
+        # ------------------------------------------------------------------
+        conn.execute(
+            "UPDATE venues SET premium_slot_price = CAST(premium_slot_price + 0.5 AS INTEGER) "
+            "WHERE premium_slot_price != CAST(premium_slot_price AS INTEGER)"
+        )
+        conn.execute(
+            "UPDATE venues SET price_jump_queue = CAST(price_jump_queue + 0.5 AS INTEGER) "
+            "WHERE price_jump_queue != CAST(price_jump_queue AS INTEGER)"
+        )
 
         # ------------------------------------------------------------------
         # Migrations: KJ-configurable products (premium slot variants)
@@ -556,13 +599,33 @@ def send_sms(to: str, body: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def send_push(tokens: list[str], title: str, body: str, data: dict | None = None) -> None:
-    """Send a push notification to one or more Expo push tokens."""
+def send_push(
+    tokens: list[str],
+    title: str,
+    body: str,
+    data: dict | None = None,
+    time_sensitive: bool = False,
+) -> None:
+    """Send a push notification to one or more Expo push tokens.
+
+    `time_sensitive` marks the alert so iOS breaks through Focus and Do Not
+    Disturb. Reserve it for things the user loses out on by missing in the
+    moment — being called up to sing. Using it for payment receipts or anything
+    promotional is what gets an app's notifications muted wholesale, and the
+    entitlement is visible to App Review.
+
+    Note the spelling: the Expo push API takes kebab-case "time-sensitive",
+    while the local-notification API uses camelCase "timeSensitive". Getting it
+    wrong fails silently and just delivers at normal priority.
+    """
     if not tokens:
         return
     messages = []
     for token in tokens:
         msg = {"to": token, "title": title, "body": body, "sound": "default"}
+        if time_sensitive:
+            msg["interruptionLevel"] = "time-sensitive"
+            msg["priority"] = "high"
         if data:
             msg["data"] = data
         messages.append(msg)
@@ -615,6 +678,23 @@ def normalize_phone(phone: str) -> str:
 def generate_code() -> str:
     """Generate a 6-digit verification code."""
     return "".join(random.choices(string.digits, k=6))
+
+
+# Prices are whole US dollars everywhere. The columns are still REAL for
+# backwards compatibility, so round on the way out rather than trusting them.
+def whole_dollars(amount: Any) -> int:
+    """Coerce a stored price to whole dollars, never negative."""
+    try:
+        return max(0, round(float(amount or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+# Bounds on a customer-chosen tip. The lower bound keeps sub-$1 charges from
+# being eaten entirely by Stripe's per-transaction fee; the upper bound limits
+# the damage from a fat-fingered or malicious amount.
+MIN_TIP_USD = 1
+MAX_TIP_USD = 500
 
 
 # How long a token from /phone/verify stays usable. Long enough that a KJ who
@@ -761,9 +841,12 @@ class VenueOut(BaseModel):
     kj_name: str | None
     phone: str | None
     website: str | None
-    price_jump_queue: float
+    # Whole US dollars. The underlying columns are still REAL for
+    # compatibility, but nothing is priced in cents, so the wire format is an
+    # int — a float here would let "$5.50" back into the clients.
+    price_jump_queue: int
     premium_slot_position: int = 3
-    premium_slot_price: float = 5.0
+    premium_slot_price: int = 5
     vibe: str | None
     distance_miles: float | None = None
     stripe_account_id: str | None = None
@@ -798,7 +881,12 @@ class PaymentRequest(BaseModel):
     venue_id: int
     singer_name: str = "Anonymous Singer"
     song_request: str = ""
-    # amount is server-derived from venue.premium_slot_price; client cannot set it
+    # What is being paid for. Premium slot pricing is server-derived from
+    # venue.premium_slot_price and the client cannot set it. A tip is the one
+    # case where the payer chooses the amount, so tip_amount_usd is honoured
+    # only when kind == "tip" and is bounds-checked before use.
+    kind: str = "premium_slot"  # "premium_slot" | "tip"
+    tip_amount_usd: int | None = None
 
 
 class PaymentResponse(BaseModel):
@@ -909,6 +997,28 @@ class KJOut(BaseModel):
     song_request_required: bool = False
 
 
+class LineupJoinRequest(BaseModel):
+    """A singer putting their name in for a turn."""
+    singer_name: str = "Anonymous Singer"
+    singer_phone: str | None = None
+    song_request: str | None = None
+    # Captured here because a singer's device row carries no phone, so this is
+    # the only handle we have for calling them up later.
+    push_token: str | None = None
+
+
+class LineupEntryOut(BaseModel):
+    id: int
+    venue_id: int
+    singer_name: str
+    singer_phone: str | None = None
+    song_request: str | None = None
+    status: str
+    created_at: str
+    notified_at: str | None = None
+    can_notify: bool = False  # False when we have no way to reach them
+
+
 class KJProfileUpdateRequest(BaseModel):
     """Edit a KJ's stage name and/or phone number.
 
@@ -965,9 +1075,11 @@ def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None, kj_song_r
         "kj_name": row["kj_name"],
         "phone": row["phone"],
         "website": row["website"],
-        "price_jump_queue": row["price_jump_queue"],
+        # Whole dollars — see whole_dollars(). Rounded on the way out so a
+        # legacy fractional row cannot render as "$5.50" in any client.
+        "price_jump_queue": whole_dollars(row["price_jump_queue"]),
         "premium_slot_position": row["premium_slot_position"],
-        "premium_slot_price": row["premium_slot_price"],
+        "premium_slot_price": whole_dollars(row["premium_slot_price"]),
         "vibe": row["vibe"],
         "distance_miles": round(distance, 1) if distance is not None else None,
         "stripe_account_id": row["stripe_account_id"] if "stripe_account_id" in row.keys() else None,
@@ -1480,6 +1592,182 @@ def list_songs(
     return [song_row_to_dict(r) for r in rows]
 
 
+# ---------------------------------------------------------------------------
+# API: lineup (pending singers)
+# ---------------------------------------------------------------------------
+
+
+def _lineup_row_to_out(row: sqlite3.Row) -> LineupEntryOut:
+    keys = set(row.keys())
+    token = row["push_token"] if "push_token" in keys else None
+    phone = row["singer_phone"] if "singer_phone" in keys else None
+    return LineupEntryOut(
+        id=row["id"],
+        venue_id=row["venue_id"],
+        singer_name=row["singer_name"],
+        singer_phone=phone,
+        song_request=row["song_request"],
+        status=row["status"],
+        created_at=row["created_at"],
+        notified_at=row["notified_at"],
+        # A push token or a phone is enough to call someone up. With neither,
+        # the KJ should not be shown a button that silently does nothing.
+        can_notify=bool(token or phone),
+    )
+
+
+def _require_venue_kj(conn: sqlite3.Connection, venue_id: int, token: str | None) -> sqlite3.Row:
+    """Authorise a KJ to manage a venue's lineup.
+
+    The lineup exposes singers' phone numbers and can send them notifications,
+    so it must not be readable or actionable by anyone who knows a venue id.
+    """
+    caller_phone = phone_for_token(conn, token)
+    if not caller_phone:
+        raise HTTPException(status_code=401, detail="Verify your phone number")
+    venue = conn.execute("SELECT * FROM venues WHERE id=?", (venue_id,)).fetchone()
+    if not venue:
+        raise HTTPException(status_code=404, detail="Venue not found")
+    kj_id = venue["kj_id"] if "kj_id" in venue.keys() else None
+    if not kj_id:
+        raise HTTPException(status_code=403, detail="No KJ is linked to this venue")
+    kj = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
+    if not kj or kj["phone"] != caller_phone:
+        raise HTTPException(status_code=403, detail="You do not host this venue")
+    return kj
+
+
+@app.post(f"{API_PREFIX}/venues/{{venue_id}}/lineup", response_model=LineupEntryOut)
+def join_lineup(venue_id: int, req: LineupJoinRequest):
+    """Add a singer to a venue's pending list."""
+    with db() as conn:
+        venue = conn.execute("SELECT id FROM venues WHERE id=?", (venue_id,)).fetchone()
+        if not venue:
+            raise HTTPException(status_code=404, detail="Venue not found")
+        phone = normalize_phone(req.singer_phone) if req.singer_phone else None
+        cur = conn.execute(
+            """INSERT INTO lineup
+               (venue_id, singer_name, singer_phone, song_request, push_token)
+               VALUES (?,?,?,?,?)""",
+            (venue_id, req.singer_name.strip() or "Anonymous Singer", phone,
+             (req.song_request or "").strip() or None, req.push_token),
+        )
+        row = conn.execute("SELECT * FROM lineup WHERE id=?", (cur.lastrowid,)).fetchone()
+        notify_kj_for_venue(
+            conn,
+            venue_id,
+            "New singer in the lineup",
+            f"{row['singer_name']} is waiting to sing"
+            + (f" ({row['song_request']})" if row["song_request"] else ""),
+            {"venue_id": venue_id, "type": "lineup_join"},
+        )
+    return _lineup_row_to_out(row)
+
+
+@app.get(f"{API_PREFIX}/venues/{{venue_id}}/lineup", response_model=list[LineupEntryOut])
+def get_lineup(venue_id: int, x_session_token: str | None = Header(default=None)):
+    """List singers still waiting. KJ only — this exposes phone numbers."""
+    with db() as conn:
+        _require_venue_kj(conn, venue_id, x_session_token)
+        rows = conn.execute(
+            "SELECT * FROM lineup WHERE venue_id=? AND status != 'done' "
+            "ORDER BY created_at",
+            (venue_id,),
+        ).fetchall()
+    return [_lineup_row_to_out(r) for r in rows]
+
+
+@app.post(f"{API_PREFIX}/lineup/{{entry_id}}/notify", response_model=LineupEntryOut)
+def notify_lineup_singer(entry_id: int, x_session_token: str | None = Header(default=None)):
+    """Tell a singer they are up soon.
+
+    This is the one notification in the app that is time-sensitive: it is
+    useless if it waits behind a Focus mode while the singer is standing in a
+    loud bar. Falls back to SMS when there is no push token.
+    """
+    with db() as conn:
+        entry = conn.execute("SELECT * FROM lineup WHERE id=?", (entry_id,)).fetchone()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Lineup entry not found")
+        kj = _require_venue_kj(conn, entry["venue_id"], x_session_token)
+
+        title = "You're up soon!"
+        body = f"{kj['name']} is calling you up at the mic in a few minutes."
+        delivered = False
+
+        if entry["push_token"]:
+            send_push(
+                [entry["push_token"]], title, body,
+                {"venue_id": entry["venue_id"], "type": "lineup_call"},
+                time_sensitive=True,
+            )
+            delivered = True
+        if entry["singer_phone"]:
+            # Best-effort second channel; a missed cue costs the singer a turn.
+            send_sms(entry["singer_phone"], f"{title} {body}")
+            delivered = True
+
+        if not delivered:
+            raise HTTPException(
+                status_code=409,
+                detail="No way to reach this singer — they left no phone number and notifications are off",
+            )
+
+        conn.execute(
+            "UPDATE lineup SET status='notified', notified_at=datetime('now') WHERE id=?",
+            (entry_id,),
+        )
+        row = conn.execute("SELECT * FROM lineup WHERE id=?", (entry_id,)).fetchone()
+    return _lineup_row_to_out(row)
+
+
+@app.post(f"{API_PREFIX}/lineup/{{entry_id}}/done", response_model=LineupEntryOut)
+def complete_lineup_entry(entry_id: int, x_session_token: str | None = Header(default=None)):
+    """Clear a singer off the pending list once they have sung or left."""
+    with db() as conn:
+        entry = conn.execute("SELECT * FROM lineup WHERE id=?", (entry_id,)).fetchone()
+        if not entry:
+            raise HTTPException(status_code=404, detail="Lineup entry not found")
+        _require_venue_kj(conn, entry["venue_id"], x_session_token)
+        conn.execute("UPDATE lineup SET status='done' WHERE id=?", (entry_id,))
+        row = conn.execute("SELECT * FROM lineup WHERE id=?", (entry_id,)).fetchone()
+    return _lineup_row_to_out(row)
+
+
+@app.get(f"{API_PREFIX}/songs/by-ids", response_model=list[SongOut])
+def songs_by_ids(ids: str = Query(..., description="Comma-separated song ids")):
+    """Resolve specific songs by id — used to display a user's favourites.
+
+    Favourites are stored on the device as bare ids. The catalog is far too
+    large to pull down and filter client-side, so they must be looked up
+    directly; anything else silently drops favourites that fall outside
+    whatever page happened to be loaded.
+    """
+    parsed: list[int] = []
+    for chunk in ids.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            parsed.append(int(chunk))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid song id: {chunk!r}")
+
+    if not parsed:
+        return []
+    # Bound the request so a corrupted device list cannot ask for everything.
+    if len(parsed) > 500:
+        raise HTTPException(status_code=400, detail="Too many ids (max 500)")
+
+    placeholders = ",".join("?" for _ in parsed)
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM songs WHERE id IN ({placeholders}) ORDER BY title",
+            parsed,
+        ).fetchall()
+    return [song_row_to_dict(r) for r in rows]
+
+
 @app.get(f"{API_PREFIX}/songs/ranges")
 def list_ranges() -> dict[str, Any]:
     """Return the valid vocal ranges + a friendly description for each."""
@@ -1797,7 +2085,7 @@ def connect_fee_preview(amount: float = Query(..., description="Amount in USD"))
 class ProductCreateRequest(BaseModel):
     """Create a new premium slot product for a venue."""
     venue_id: int
-    name: str  # e.g. "Premium Slot - $5", "Skip the Queue - $6"
+    name: str  # e.g. "Premium Slot - $5", "Move Up in the Queue - $6"
     description: str = ""
     amount_usd: float  # e.g. 5.00, 6.00
 
@@ -2028,9 +2316,26 @@ def create_payment_session(req: PaymentRequest):
     if not venue:
         raise HTTPException(status_code=404, detail="Venue not found")
 
-    amount = float(venue["premium_slot_price"])
-    # Stripe expects cents
-    amount_cents = int(round(amount * 100))
+    # Prices are whole US dollars throughout. Rounding here rather than
+    # trusting the stored float keeps what we charge identical to what the
+    # apps display, and stops a legacy 5.5 row from billing $5.50 while every
+    # screen says $6.
+    is_tip = req.kind == "tip"
+    if is_tip:
+        if req.tip_amount_usd is None:
+            raise HTTPException(status_code=400, detail="tip_amount_usd is required for a tip")
+        amount = int(req.tip_amount_usd)
+        if not (MIN_TIP_USD <= amount <= MAX_TIP_USD):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tip must be between ${MIN_TIP_USD} and ${MAX_TIP_USD}",
+            )
+    else:
+        amount = whole_dollars(venue["premium_slot_price"])
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail="This venue has no premium slot price set")
+
+    amount_cents = amount * 100  # whole dollars, so this is exact
 
     kj_name = venue["kj_name"] or "the KJ"
     slot_pos = int(venue["premium_slot_position"])
@@ -2057,13 +2362,18 @@ def create_payment_session(req: PaymentRequest):
             session_id=f"test_session_{payment_id}",
         )
 
-    # Build product info
-    product_name = f"Premium Slot Reservation — {venue['name']}"
-    product_desc = (
-        f"Support {kj_name} and secure a preferred singing time "
-        f"(~{slot_pos}{_ordinal(slot_pos)} slot)"
-        + (f". Song: {req.song_request}" if req.song_request else "")
-    )
+    # Build product info. This is what the customer reads on Stripe's checkout
+    # page, so a tip must not be described as a slot reservation.
+    if is_tip:
+        product_name = f"Tip for {kj_name} — {venue['name']}"
+        product_desc = f"A ${amount} tip for {kj_name}, paid directly to them."
+    else:
+        product_name = f"Premium Slot Reservation — {venue['name']}"
+        product_desc = (
+            f"Support {kj_name} and secure a preferred singing time "
+            f"(~{slot_pos}{_ordinal(slot_pos)} slot)"
+            + (f". Song: {req.song_request}" if req.song_request else "")
+        )
 
     # Calculate fee breakdown for this charge
     fee = connect.calculate_fee(amount_cents)
@@ -2104,8 +2414,8 @@ def create_payment_session(req: PaymentRequest):
                     }
                 ],
                 mode="payment",
-                success_url=f"thehopper://payment-success?venue_id={req.venue_id}",
-                cancel_url=f"thehopper://payment-cancelled?venue_id={req.venue_id}",
+                success_url=f"{APP_URL_SCHEME}://payment-success?venue_id={req.venue_id}",
+                cancel_url=f"{APP_URL_SCHEME}://payment-cancelled?venue_id={req.venue_id}",
                 payment_intent_data={
                     "application_fee_amount": fee.platform_fee_cents,
                     "transfer_data": {
@@ -2140,8 +2450,8 @@ def create_payment_session(req: PaymentRequest):
                     }
                 ],
                 mode="payment",
-                success_url=f"thehopper://payment-success?venue_id={req.venue_id}",
-                cancel_url=f"thehopper://payment-cancelled?venue_id={req.venue_id}",
+                success_url=f"{APP_URL_SCHEME}://payment-success?venue_id={req.venue_id}",
+                cancel_url=f"{APP_URL_SCHEME}://payment-cancelled?venue_id={req.venue_id}",
                 metadata={
                     "payment_id": str(payment_id),
                     "venue_id": str(req.venue_id),
@@ -2241,14 +2551,29 @@ async def stripe_webhook(request: Request) -> dict[str, str]:
                     "WHERE id=?",
                     (pid,),
                 )
-                # Notify the KJ about the premium slot payment
+                # Notify the KJ. Tips ride the same checkout flow with a TIP:
+                # prefix in the request field, so split them out here — telling
+                # a KJ that someone "reserved a premium slot (song: TIP:$5)" is
+                # both wrong and confusing.
                 if venue_id:
+                    if song_request.startswith("TIP:"):
+                        # "TIP:$5 — thanks for the great night"
+                        detail = song_request[len("TIP:"):].strip()
+                        title = "Tip Received"
+                        body = f"{singer_name} sent you a tip" + (f": {detail}" if detail else "")
+                        kind = "tip"
+                    else:
+                        title = "Premium Slot Reserved"
+                        body = f"{singer_name} just reserved a premium slot" + (
+                            f" (song: {song_request})" if song_request else ""
+                        )
+                        kind = "premium_slot"
                     notify_kj_for_venue(
                         conn,
                         int(venue_id),
-                        "Premium Slot Reserved",
-                        f"{singer_name} just reserved a premium slot" + (f" (song: {song_request})" if song_request else ""),
-                        {"venue_id": int(venue_id), "type": "premium_slot"},
+                        title,
+                        body,
+                        {"venue_id": int(venue_id), "type": kind},
                     )
 
     # --- Connect: account updated (KYC status changed) ---
@@ -3760,10 +4085,35 @@ async def kj_subdomain_middleware(request: Request, call_next):
 
 
 # ---------------------------------------------------------------------------
+# Legal / support pages (required by the App Store and Play Store)
+# ---------------------------------------------------------------------------
+#
+# Declared before the SPA catch-all below: FastAPI matches routes in
+# registration order, so "/{full_path:path}" would otherwise swallow these and
+# return the app shell to a store reviewer looking for a privacy policy.
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_policy() -> HTMLResponse:
+    return HTMLResponse(content=privacy_html())
+
+
+@app.get("/support", response_class=HTMLResponse)
+def support_page() -> HTMLResponse:
+    return HTMLResponse(content=support_html())
+
+
+# ---------------------------------------------------------------------------
 # Static file serving (production: built frontend)
 # ---------------------------------------------------------------------------
 
 if FRONTEND_DIST.exists():
+    # Must match `base` in frontend/vite.config.ts — the built index.html
+    # requests its assets at that prefix.
+    app.mount("/karaokespot/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="karaokespot-assets")
+    # Legacy prefix from the TheHopper build. Harmless to keep and it stops a
+    # stale cached index.html from 404ing mid-rename; drop it once the new
+    # build is confirmed live.
     app.mount("/thehopper/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="thehopper-assets")
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
@@ -3772,6 +4122,22 @@ if FRONTEND_DIST.exists():
         # Serve the SPA index.html for any non-API route (client-side routing)
         if full_path.startswith("api"):
             raise HTTPException(status_code=404)
+
+        # Files Vite copies from public/ (mic.svg, robots.txt, …) land at the
+        # dist root, not under assets/, so the asset mounts above never see
+        # them. Without this they fall through and get index.html with an
+        # HTML content-type — which is why the favicon never rendered.
+        candidate = full_path
+        for prefix in ("karaokespot/", "thehopper/"):
+            if candidate.startswith(prefix):
+                candidate = candidate[len(prefix):]
+                break
+        if candidate:
+            target = (FRONTEND_DIST / candidate).resolve()
+            # Containment check — never serve outside the build directory.
+            if target.is_file() and target.is_relative_to(FRONTEND_DIST.resolve()):
+                return FileResponse(target)
+
         index = FRONTEND_DIST / "index.html"
         if index.exists():
             return FileResponse(index)

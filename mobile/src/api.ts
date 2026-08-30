@@ -3,6 +3,7 @@ import type {
   AppConfig,
   ChatMessage,
   KJ,
+  LineupEntry,
   PaymentResponse,
   PhoneVerifyResponse,
   Song,
@@ -94,6 +95,16 @@ export const api = {
       }),
     ),
 
+  /**
+   * Resolve specific songs by id. Favourites live on the device as bare ids and
+   * the catalog is far too large to fetch and filter locally, so they have to
+   * be looked up directly.
+   */
+  getSongsByIds: (ids: number[]) =>
+    ids.length === 0
+      ? Promise.resolve([] as Song[])
+      : jsonFetch<Song[]>(`${API_BASE}/songs/by-ids?ids=${ids.join(',')}`),
+
   getRanges: () => jsonFetch<{ ranges: VocalRange[] }>(`${API_BASE}/songs/ranges`),
 
   getSuggestions: (
@@ -108,15 +119,31 @@ export const api = {
       body: JSON.stringify({ vocal_range, favorite_artists, favorite_genres, limit }),
     }),
 
+  /**
+   * Start a Stripe Checkout session.
+   *
+   * Premium-slot pricing is server-derived — the client cannot set it. A tip is
+   * the one case where the payer picks the amount, so pass kind: 'tip' with a
+   * whole-dollar tip_amount_usd; the server bounds-checks it.
+   */
   createPaymentSession: (
     venue_id: number,
     singer_name: string,
     song_request: string,
+    options?: { kind?: 'premium_slot' | 'tip'; tip_amount_usd?: number },
   ) =>
     jsonFetch<PaymentResponse>(`${API_BASE}/create-payment-session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ venue_id, singer_name, song_request }),
+      body: JSON.stringify({
+        venue_id,
+        singer_name,
+        song_request,
+        kind: options?.kind ?? 'premium_slot',
+        ...(options?.tip_amount_usd != null
+          ? { tip_amount_usd: options.tip_amount_usd }
+          : {}),
+      }),
     }),
 
   getVenueChat: (venue_id: number, since?: number) =>
@@ -145,6 +172,44 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, phone }),
+    }),
+
+  // --- Lineup (pending singers) ---
+
+  /** Put a singer on a venue's pending list. */
+  joinLineup: (
+    venue_id: number,
+    data: {
+      singer_name: string;
+      singer_phone?: string;
+      song_request?: string;
+      push_token?: string;
+    },
+  ) =>
+    jsonFetch<LineupEntry>(`${API_BASE}/venues/${venue_id}/lineup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
+  /** KJ-only: singers still waiting at this venue. */
+  getLineup: (venue_id: number, session_token: string) =>
+    jsonFetch<LineupEntry[]>(`${API_BASE}/venues/${venue_id}/lineup`, {
+      headers: { 'X-Session-Token': session_token },
+    }),
+
+  /** KJ-only: send the singer a time-sensitive "you're up soon" alert. */
+  notifyLineupSinger: (entry_id: number, session_token: string) =>
+    jsonFetch<LineupEntry>(`${API_BASE}/lineup/${entry_id}/notify`, {
+      method: 'POST',
+      headers: { 'X-Session-Token': session_token },
+    }),
+
+  /** KJ-only: clear a singer off the pending list. */
+  completeLineupEntry: (entry_id: number, session_token: string) =>
+    jsonFetch<LineupEntry>(`${API_BASE}/lineup/${entry_id}/done`, {
+      method: 'POST',
+      headers: { 'X-Session-Token': session_token },
     }),
 
   // --- Venue submission (add a karaoke spot) ---

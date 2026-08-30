@@ -1,10 +1,18 @@
-# Fastlane configuration for TheHopper
+# Fastlane configuration for KaraokeSpot
+#
+# Team IDs are read from the environment so nothing secret or account-specific
+# is committed. Set these in your shell (or CI secrets) before running a lane:
+#
+#   FASTLANE_TEAM_ID      Apple Developer Team ID     (Membership page)
+#   FASTLANE_ITC_TEAM_ID  App Store Connect Team ID   (numeric)
+#
+# Find them with:  fastlane produce --help  /  or the Apple Developer portal.
 
 # iOS
-app_identifier("co.launchable.thehopper")
-apple_id("roscoe@alchemycreativelounge.com")
-team_id("YOUR_TEAM_ID")
-itc_team_id("YOUR_ITC_TEAM_ID")
+app_identifier("co.launchable.karaokespot")
+apple_id(ENV["FASTLANE_APPLE_ID"] || "roscoe@alchemycreativelounge.com")
+team_id(ENV["FASTLANE_TEAM_ID"])
+itc_team_id(ENV["FASTLANE_ITC_TEAM_ID"])
 
 # Android
-package_name("co.launchable.thehopper")
+package_name("co.launchable.karaokespot")

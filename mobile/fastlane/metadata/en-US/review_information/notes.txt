@@ -1,1 +1,28 @@
-TheHopper is a karaoke companion app. No login required. Browse venues, get song suggestions, and optionally pay KJs via Stripe test mode. App is fully functional in test mode.
+KaraokeSpot helps singers find live karaoke nights at physical bars and venues,
+and lets the karaoke host (KJ) running that night manage the lineup.
+
+BROWSING — no account needed
+Finding venues, browsing the song catalog, and saving favorites all work
+anonymously. Grant location permission to see venues sorted by distance. The
+app is seeded with venues in Brevard County, FL, so please allow location or
+the venue list may appear empty.
+
+PAYMENTS — real-world services at a physical venue
+Payments are for services delivered in person at a bar or venue on the night:
+premium placement in that venue's live singing queue, and tips paid directly to
+the human KJ hosting the event. Nothing digital is unlocked in the app by
+paying. These are handled by Stripe Checkout under guideline 3.1.3(e)
+(goods and services consumed outside the app) and 3.1.5(b) (person-to-person
+services). Funds go to the KJ's own connected Stripe account, less a platform
+fee.
+
+IMPORTANT: this build is connected to LIVE Stripe keys, so completing a
+checkout results in a real charge to the card used. Please contact us at the
+support email before testing a payment and we will arrange a test venue or
+refund any review charges immediately.
+
+KJ FEATURES — requires SMS verification
+The "I'm the KJ" flow on the Add Spot tab verifies ownership of a phone number
+by SMS, so it needs a phone that can receive text messages. If you need to
+review the KJ and payout screens, contact us at the support email and we will
+supply a verification path.

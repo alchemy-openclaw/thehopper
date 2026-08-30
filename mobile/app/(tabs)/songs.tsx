@@ -28,7 +28,9 @@ type FilterMode = 'all' | 'favorites';
 
 export default function SongsScreen() {
   const [songs, setSongs] = useState<Song[]>([]);
-  const [allSongs, setAllSongs] = useState<Song[]>([]);
+  // Saved songs, resolved from the ids held on the device. Not the whole
+  // catalog — that is far too large to hold client-side.
+  const [favoriteSongs, setFavoriteSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -39,13 +41,34 @@ export default function SongsScreen() {
   const [prefs, setPrefs] = usePrefsContext();
   const favorites = prefs.favorites;
 
-  // Load all songs (for favorites filtering) once, plus filtered results on search
+  // Resolve saved songs by id. The catalog runs to tens of thousands of tracks,
+  // so it cannot be pulled down and filtered locally — doing that silently lost
+  // every favourite outside the first page.
   useEffect(() => {
-    // Always keep a full list for favorites mode
-    api.getSongs(undefined, undefined, 500).then(setAllSongs).catch(() => {});
-  }, []);
+    let cancelled = false;
+    api
+      .getSongsByIds(favorites)
+      .then((data) => {
+        if (!cancelled) setFavoriteSongs(data);
+      })
+      .catch(() => {
+        if (!cancelled) setFavoriteSongs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [favorites]);
 
+  // Browsing the whole catalog alphabetically is meaningless at this size — the
+  // first page is punctuation-leading titles nobody searched for. Only query
+  // once there is an actual search or genre filter to narrow by.
   useEffect(() => {
+    if (!search.trim() && !genre) {
+      setSongs([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     const t = setTimeout(() => {
       setLoading(true);
       setError(null);
@@ -65,9 +88,9 @@ export default function SongsScreen() {
 
   const genres = useMemo(() => {
     const set = new Set<string>();
-    (filterMode === 'favorites' ? allSongs : songs).forEach((s) => set.add(s.genre));
+    (filterMode === 'favorites' ? favoriteSongs : songs).forEach((s) => set.add(s.genre));
     return Array.from(set).sort();
-  }, [songs, allSongs, filterMode]);
+  }, [songs, favoriteSongs, filterMode]);
 
   const toggleFav = (id: number) => {
     setPrefs((p) => toggleFavorite(p, id));
@@ -77,7 +100,7 @@ export default function SongsScreen() {
   const displayedSongs: Song[] = useMemo(() => {
     if (filterMode === 'favorites') {
       const favSet = new Set(favorites);
-      let favSongs = allSongs.filter((s) => favSet.has(s.id));
+      let favSongs = favoriteSongs.filter((s) => favSet.has(s.id));
       // Apply search/genre filter on favorites too
       if (search.trim()) {
         const q = search.trim().toLowerCase();
@@ -93,7 +116,7 @@ export default function SongsScreen() {
       return favSongs;
     }
     return songs;
-  }, [filterMode, favorites, allSongs, search, genre, songs]);
+  }, [filterMode, favorites, favoriteSongs, search, genre, songs]);
 
   return (
     <ScrollView
@@ -155,6 +178,11 @@ export default function SongsScreen() {
         <EmptyState
           icon="⭐"
           message="No saved songs yet. Tap the ☆ on any song to save it here."
+        />
+      ) : filterMode === 'all' && !search.trim() && !genre ? (
+        <EmptyState
+          icon="🔍"
+          message="Search by song title or artist to find something to sing."
         />
       ) : loading && filterMode === 'all' ? (
         <Loading label="Loading songbook…" />

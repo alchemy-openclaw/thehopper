@@ -170,7 +170,6 @@ function VenueDetail({
 }) {
   const [showMessage, setShowMessage] = useState(false);
   const [showReserve, setShowReserve] = useState(false);
-  const [showChat, setShowChat] = useState(false);
 
   const stripeConfigured = config?.stripe_configured ?? false;
   const kjName = venue.kj_name || 'the KJ';
@@ -228,7 +227,6 @@ function VenueDetail({
             onClick={() => {
               setShowMessage(true);
               setShowReserve(false);
-              setShowChat(false);
             }}
           >
             💬 Message KJ
@@ -238,20 +236,9 @@ function VenueDetail({
             onClick={() => {
               setShowReserve(true);
               setShowMessage(false);
-              setShowChat(false);
             }}
           >
             🎤 Reserve a premium slot
-          </button>
-          <button
-            className="btn secondary"
-            onClick={() => {
-              setShowChat(true);
-              setShowMessage(false);
-              setShowReserve(false);
-            }}
-          >
-            💬 Venue chat
           </button>
         </div>
 
@@ -298,9 +285,6 @@ function VenueDetail({
         />
       )}
 
-      {showChat && (
-        <VenueChat venue={venue} onClose={() => setShowChat(false)} onError={onError} />
-      )}
     </div>
   );
 }
@@ -465,7 +449,7 @@ function ReserveSlotModal({
 
         <div className="reserve-info">
           <div className="price-display">
-            ${slotPrice.toFixed(2)}{' '}
+            ${Math.round(slotPrice)}{' '}
             <small>to support {kjName}</small>
           </div>
           <p className="reserve-blurb">
@@ -512,7 +496,7 @@ function ReserveSlotModal({
             <button className="btn" type="submit" disabled={submitting}>
               {submitting
                 ? 'Starting checkout…'
-                : `Reserve · $${slotPrice.toFixed(2)}`}
+                : `Reserve · $${Math.round(slotPrice)}`}
             </button>
           </div>
         </form>
@@ -521,8 +505,16 @@ function ReserveSlotModal({
   );
 }
 
-/** Per-venue chat room with WebSocket real-time updates. */
-function VenueChat({
+/**
+ * Per-venue chat room with WebSocket real-time updates.
+ *
+ * NOT RENDERED IN THE MVP, matching the mobile app: an unmoderated room open to
+ * a whole bar is an abuse and harassment surface we are not staffed to police.
+ * Kept whole — along with its styles and the getVenueChat/postVenueChat API
+ * methods — so it can be restored once there is a moderation story. Message KJ
+ * remains as the private channel to the host.
+ */
+export function VenueChat({
   venue,
   onClose,
   onError,
@@ -533,7 +525,7 @@ function VenueChat({
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [nickname, setNickname] = useState(
-    () => localStorage.getItem('thehopper_nick') || '',
+    () => localStorage.getItem('karaokespot_nick') || '',
   );
   const [draft, setDraft] = useState('');
   const [connected, setConnected] = useState(false);
@@ -615,7 +607,7 @@ function VenueChat({
     if (!msg) return;
 
     // persist nickname
-    localStorage.setItem('thehopper_nick', nick);
+    localStorage.setItem('karaokespot_nick', nick);
 
     // Send via WebSocket if connected, else fall back to REST
     if (wsRef.current?.readyState === WebSocket.OPEN) {

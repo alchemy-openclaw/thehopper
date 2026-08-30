@@ -1,92 +1,174 @@
+require "json"
+
 default_platform(:ios)
 
-# ── iOS Lanes ──────────────────────────────────────────────
+# ── Notes on this project's shape ──────────────────────────────────────────
+#
+# KaraokeSpot is an Expo Continuous Native Generation project: ios/ and
+# android/ are build artifacts regenerated from app.json and are gitignored.
+# Every lane therefore runs `expo prebuild` first — on CI, and after any clone,
+# those directories simply do not exist.
+#
+# That also dictates how versioning works. `increment_build_number` edits the
+# Xcode project, which the next prebuild overwrites, so the build number is
+# bumped in app.json *before* prebuild instead.
+#
+# Fastlane runs with its working directory set to fastlane/, so paths below are
+# relative to that ("../" is the mobile/ project root).
 
-lane :beta do
-  setup_ci if ENV["CI"]
-  
-  # Install pods if needed
-  cocoapods unless File.exist?("../ios/Podfile.lock")
-  
-  # Build and upload to TestFlight
-  build_app(
-    project: "../ios/TheHopper.xcodeproj",
-    scheme: "TheHopper",
-    export_method: "ad-hoc",
-    output_directory: "./build/ios"
-  )
-  
-  upload_to_testflight(
-    skip_waiting_for_build_processing: true
+APP_JSON = "../app.json"
+
+# ── Helpers ────────────────────────────────────────────────────────────────
+
+# Bump ios.buildNumber and android.versionCode in app.json.
+# Store rules: every upload needs a build number higher than the last one, and
+# the marketing version (expo.version) is what users see.
+def bump_build_number
+  config = JSON.parse(File.read(APP_JSON))
+  expo = config["expo"]
+
+  ios_build = (expo.dig("ios", "buildNumber") || "0").to_i + 1
+  android_code = (expo.dig("android", "versionCode") || 0).to_i + 1
+
+  expo["ios"]["buildNumber"] = ios_build.to_s
+  expo["android"]["versionCode"] = android_code
+
+  File.write(APP_JSON, JSON.pretty_generate(config) + "\n")
+  UI.message("Bumped to iOS build #{ios_build} / Android versionCode #{android_code}")
+  { ios: ios_build, android: android_code }
+end
+
+# Regenerate the native project from app.json.
+def prebuild(platform)
+  sh("cd .. && npx expo prebuild --platform #{platform} --clean --non-interactive")
+end
+
+# App Store Connect API key. Preferred over an Apple ID + app-specific
+# password: it does not trip 2FA prompts in CI.
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_FILEPATH  (path to the .p8)
+def load_asc_api_key
+  return nil unless ENV["ASC_KEY_ID"] && ENV["ASC_ISSUER_ID"] && ENV["ASC_KEY_FILEPATH"]
+
+  app_store_connect_api_key(
+    key_id: ENV["ASC_KEY_ID"],
+    issuer_id: ENV["ASC_ISSUER_ID"],
+    key_filepath: ENV["ASC_KEY_FILEPATH"],
+    in_house: false
   )
 end
 
-lane :release do
-  setup_ci if ENV["CI"]
-  
-  build_app(
-    project: "../ios/TheHopper.xcodeproj",
-    scheme: "TheHopper",
-    export_method: "app-store",
-    output_directory: "./build/ios"
-  )
-  
-  upload_to_app_store(
-    skip_screenshots: true,
-    skip_metadata: false,
-    submit_for_review: false
-  )
-end
+# ── iOS Lanes ──────────────────────────────────────────────────────────────
 
-lane :screenshots do
-  capture_screenshots(scheme: "TheHopper")
-end
-
-# ── Android Lanes ──────────────────────────────────────────
-
-platform :android do
+platform :ios do
+  desc "Build and upload to TestFlight"
   lane :beta do
     setup_ci if ENV["CI"]
-    
-    # Build APK/AAB for testing
-    gradle(
-      task: "assembleRelease",
-      project_dir: "../android"
+    api_key = load_asc_api_key
+
+    bump_build_number
+    prebuild("ios")
+    cocoapods(podfile: "../ios/Podfile")
+
+    # Must build the .xcworkspace, not the .xcodeproj — this project uses
+    # CocoaPods, and the bare project does not link the pods.
+    #
+    # TestFlight only accepts app-store exports; an ad-hoc export is rejected
+    # at upload with a misleading error.
+    build_app(
+      workspace: "../ios/KaraokeSpot.xcworkspace",
+      scheme: "KaraokeSpot",
+      export_method: "app-store",
+      output_directory: "../build/ios",
+      clean: true
     )
-    
-    upload_to_play_store(
-      track: "internal",
-      skip_upload_metadata: false,
-      skip_upload_images: true,
-      skip_upload_screenshots: true,
-      aab: "../android/app/build/outputs/bundle/release/app-release.aab"
+
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true
     )
   end
-  
+
+  desc "Build and upload to App Store Connect (does not submit for review)"
   lane :release do
     setup_ci if ENV["CI"]
-    
-    gradle(
-      task: "bundleRelease",
-      project_dir: "../android"
+    api_key = load_asc_api_key
+
+    bump_build_number
+    prebuild("ios")
+    cocoapods(podfile: "../ios/Podfile")
+
+    build_app(
+      workspace: "../ios/KaraokeSpot.xcworkspace",
+      scheme: "KaraokeSpot",
+      export_method: "app-store",
+      output_directory: "../build/ios",
+      clean: true
     )
-    
-    upload_to_play_store(
-      track: "production",
-      skip_upload_images: true,
-      skip_upload_screenshots: true,
-      aab: "../android/app/build/outputs/bundle/release/app-release.aab"
+
+    upload_to_app_store(
+      api_key: api_key,
+      skip_screenshots: true,
+      skip_metadata: false,
+      submit_for_review: false,
+      precheck_include_in_app_purchases: false
     )
-  end
-  
-  lane :screenshots do
-    capture_android_screenshots
   end
 end
 
-# ── Shared ────────────────────────────────────────────────
+# ── Android Lanes ──────────────────────────────────────────────────────────
+#
+# upload_to_play_store authenticates with a Google Play service account JSON.
+# Point SUPPLY_JSON_KEY at that file (fastlane picks the env var up on its own):
+#
+#   export SUPPLY_JSON_KEY=/secure/path/play-service-account.json
+#
+# Create it in Google Cloud Console, then grant it access in Play Console under
+# Users and permissions. Do not commit the file.
 
+platform :android do
+  desc "Build an AAB and upload to the Play internal track"
+  lane :beta do
+    setup_ci if ENV["CI"]
+
+    bump_build_number
+    prebuild("android")
+
+    # bundleRelease produces the .aab that upload_to_play_store expects.
+    # assembleRelease produces an APK, and the aab: path below would not exist.
+    gradle(task: "bundleRelease", project_dir: "../android")
+
+    upload_to_play_store(
+      track: "internal",
+      aab: "../android/app/build/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Build an AAB and upload to the Play production track"
+  lane :release do
+    setup_ci if ENV["CI"]
+
+    bump_build_number
+    prebuild("android")
+
+    gradle(task: "bundleRelease", project_dir: "../android")
+
+    upload_to_play_store(
+      track: "production",
+      aab: "../android/app/build/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: false,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end
+
+# ── Shared ────────────────────────────────────────────────────────────────
+
+desc "Download dSYMs and send them to Crashlytics"
 lane :refresh_dsyms do
-  download_dsyms
+  download_dsyms(api_key: load_asc_api_key)
   upload_symbols_to_crashlytics
 end

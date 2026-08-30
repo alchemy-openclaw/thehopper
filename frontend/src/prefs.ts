@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { UserPrefs } from './types';
 import { DEFAULT_PREFS } from './types';
 
-const KEY = 'thehopper_prefs';
+const KEY = 'karaokespot_prefs';
 
 function load(): UserPrefs {
   try {

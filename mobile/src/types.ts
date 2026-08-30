@@ -102,6 +102,19 @@ export interface VenueSubmissionResponse {
   message: string;
 }
 
+export interface LineupEntry {
+  id: number;
+  venue_id: number;
+  singer_name: string;
+  singer_phone?: string | null;
+  song_request?: string | null;
+  status: string; // pending | notified | done
+  created_at: string;
+  notified_at?: string | null;
+  /** False when the singer left no phone and has notifications off. */
+  can_notify: boolean;
+}
+
 export interface KJ {
   id: number;
   name: string;

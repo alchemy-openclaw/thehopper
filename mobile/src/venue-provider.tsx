@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { VenueContext, type VenueState } from './venue-context';
 import type { Venue } from './types';
 
-const KEY = 'thehopper_selected_venue';
+const KEY = 'karaokespot_selected_venue';
 
 /**
  * Provides the currently selected venue to all tabs.

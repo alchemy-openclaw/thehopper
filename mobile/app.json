@@ -1,22 +1,27 @@
 {
   "expo": {
-    "name": "TheHopper",
-    "slug": "thehopper",
+    "name": "KaraokeSpot",
+    "slug": "karaokespot",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "thehopper",
+    "scheme": "karaokespot",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "co.launchable.thehopper",
+      "bundleIdentifier": "co.launchable.karaokespot",
+      "buildNumber": "1",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "TheHopper uses your location to find karaoke venues near you."
+        "NSLocationWhenInUseUsageDescription": "KaraokeSpot uses your location to find karaoke venues near you."
+      },
+      "entitlements": {
+        "com.apple.developer.usernotifications.time-sensitive": true
       }
     },
     "android": {
-      "package": "co.launchable.thehopper",
+      "package": "co.launchable.karaokespot",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0d0221",
         "foregroundImage": "./assets/android-icon-foreground.png",

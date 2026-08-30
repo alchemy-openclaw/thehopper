@@ -3,7 +3,7 @@
  * Route: /kj/[id]
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -16,7 +16,8 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { api } from '../../src/api';
-import type { KJ, Venue, StripeStatusResponse } from '../../src/types';
+import { getSessionToken } from '../../src/session';
+import type { KJ, LineupEntry, Venue, StripeStatusResponse } from '../../src/types';
 import {
   Banner,
   Button,
@@ -39,6 +40,15 @@ export default function KJProfileScreen() {
   const [songRequired, setSongRequired] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // Pending singers for the KJ's first venue. A KJ hosting several venues runs
+  // one night at a time, so this shows the venue they are most likely at rather
+  // than inventing a venue switcher before there is demand for one.
+  const [lineup, setLineup] = useState<LineupEntry[]>([]);
+  const [lineupVenue, setLineupVenue] = useState<Venue | null>(null);
+  const [lineupLoading, setLineupLoading] = useState(false);
+  const [lineupError, setLineupError] = useState<string | null>(null);
+  const [busyEntry, setBusyEntry] = useState<number | null>(null);
+
   useEffect(() => {
     if (!kjId) return;
     Promise.all([
@@ -51,10 +61,63 @@ export default function KJProfileScreen() {
         setVenues(venuesData);
         setStripeStatus(stripeData);
         setSongRequired(kjData.song_request_required ?? false);
+        if (venuesData.length > 0) setLineupVenue(venuesData[0]);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load KJ'))
       .finally(() => setLoading(false));
   }, [kjId]);
+
+  const refreshLineup = useCallback(async () => {
+    if (!lineupVenue) return;
+    const token = await getSessionToken();
+    if (!token) {
+      setLineupError('Verify your phone number to see your lineup.');
+      return;
+    }
+    setLineupLoading(true);
+    setLineupError(null);
+    try {
+      setLineup(await api.getLineup(lineupVenue.id, token));
+    } catch (e) {
+      setLineupError(e instanceof Error ? e.message : 'Could not load the lineup');
+    } finally {
+      setLineupLoading(false);
+    }
+  }, [lineupVenue]);
+
+  useEffect(() => {
+    refreshLineup();
+  }, [refreshLineup]);
+
+  const handleNotify = async (entry: LineupEntry) => {
+    const token = await getSessionToken();
+    if (!token) return;
+    setBusyEntry(entry.id);
+    setLineupError(null);
+    try {
+      const updated = await api.notifyLineupSinger(entry.id, token);
+      setLineup((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+      Alert.alert('Singer notified', `${entry.singer_name} has been told they're up soon.`);
+    } catch (e) {
+      setLineupError(e instanceof Error ? e.message : 'Could not notify that singer');
+    } finally {
+      setBusyEntry(null);
+    }
+  };
+
+  const handleDone = async (entry: LineupEntry) => {
+    const token = await getSessionToken();
+    if (!token) return;
+    setBusyEntry(entry.id);
+    try {
+      await api.completeLineupEntry(entry.id, token);
+      setLineup((prev) => prev.filter((e) => e.id !== entry.id));
+    } catch (e) {
+      setLineupError(e instanceof Error ? e.message : 'Could not update that singer');
+    } finally {
+      setBusyEntry(null);
+    }
+  };
 
   const handleStripeOnboard = async () => {
     if (!kj) return;
@@ -130,6 +193,68 @@ export default function KJProfileScreen() {
           )}
         </View>
       </Card>
+
+      {/* Pending singers. Not an ordered queue — the KJ runs the rotation
+          themselves; this just shows who is waiting and lets them call
+          someone up. */}
+      {lineupVenue && (
+        <Card>
+          <View style={styles.lineupHeader}>
+            <Text style={styles.sectionTitle}>Pending Singers</Text>
+            <Pressable onPress={refreshLineup} hitSlop={10}>
+              <Text style={styles.refreshLink}>
+                {lineupLoading ? 'Refreshing…' : 'Refresh'}
+              </Text>
+            </Pressable>
+          </View>
+          <Text style={styles.lineupVenueName}>{lineupVenue.name}</Text>
+
+          {lineupError && <Banner message={`⚠️ ${lineupError}`} variant="warn" />}
+
+          {lineup.length === 0 && !lineupLoading && !lineupError ? (
+            <Text style={styles.lineupEmpty}>
+              Nobody is waiting right now. Singers appear here when they tap
+              Get In Line at your venue.
+            </Text>
+          ) : (
+            lineup.map((entry) => (
+              <View key={entry.id} style={styles.lineupRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.lineupName}>
+                    {entry.singer_name}
+                    {entry.status === 'notified' ? ' · called up' : ''}
+                  </Text>
+                  {entry.song_request ? (
+                    <Text style={styles.lineupSong}>🎵 {entry.song_request}</Text>
+                  ) : null}
+                  {!entry.can_notify && (
+                    <Text style={styles.lineupNoContact}>
+                      No phone or notifications — call them over in person.
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.lineupActions}>
+                  <Button
+                    label={
+                      busyEntry === entry.id
+                        ? '…'
+                        : entry.status === 'notified'
+                          ? 'Notify again'
+                          : "They're up"
+                    }
+                    onPress={() => handleNotify(entry)}
+                    disabled={busyEntry === entry.id || !entry.can_notify}
+                    variant="cyan"
+                  />
+                  <Pressable onPress={() => handleDone(entry)} hitSlop={8}>
+                    <Text style={styles.lineupDone}>Done</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))
+          )}
+        </Card>
+      )}
 
       {/* Stripe status */}
       <Card>
@@ -212,6 +337,27 @@ const styles = StyleSheet.create({
   links: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   linkText: { color: Colors.cyan, fontSize: 14, fontWeight: '600' },
   sectionTitle: { ...Typography.heading, color: Colors.text, marginBottom: Spacing.sm },
+  lineupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  refreshLink: { color: Colors.cyan, fontSize: 14, fontWeight: '600' },
+  lineupVenueName: { color: Colors.textDim, fontSize: 13, marginBottom: Spacing.sm },
+  lineupEmpty: { color: Colors.textDim, fontSize: 14, lineHeight: 20 },
+  lineupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  lineupName: { color: Colors.text, fontSize: 15, fontWeight: '700' },
+  lineupSong: { color: Colors.textDim, fontSize: 13, marginTop: 2 },
+  lineupNoContact: { color: Colors.textMute, fontSize: 12, marginTop: 2 },
+  lineupActions: { alignItems: 'flex-end', gap: 4 },
+  lineupDone: { color: Colors.textMute, fontSize: 13, paddingVertical: 4 },
   sectionLabel: {
     fontSize: 13,
     fontWeight: '700',

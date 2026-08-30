@@ -7,7 +7,7 @@ import { DEFAULT_PREFS } from './types';
 // Re-export so existing imports from 'prefs' continue to work
 export { getGeolocation };
 
-const KEY = 'thehopper_prefs';
+const KEY = 'karaokespot_prefs';
 
 async function load(): Promise<UserPrefs> {
   try {

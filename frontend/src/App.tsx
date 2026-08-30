@@ -49,7 +49,7 @@ export default function App() {
           🎤
         </div>
         <div>
-          <h1>TheHopper</h1>
+          <h1>KaraokeSpot</h1>
           <div className="tag">Brevard karaoke companion</div>
         </div>
       </header>
@@ -86,11 +86,11 @@ export default function App() {
         {tab === 'fav' && <FavoritesPage prefs={prefs} />}
       </main>
 
+      {/* The old footer linked to Stripe's test-mode docs, which is wrong now
+          that this runs against live keys — real cards are charged here. */}
       <footer className="footer">
-        TheHopper · Made for Brevard County karaoke ·{' '}
-        <a href="https://stripe.com/docs/testing" target="_blank" rel="noreferrer">
-          test mode
-        </a>
+        KaraokeSpot · Made for Brevard County karaoke ·{' '}
+        <a href="/privacy">Privacy</a> · <a href="/support">Support</a>
       </footer>
     </div>
   );

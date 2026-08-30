@@ -17,6 +17,8 @@ import * as LinkingExpo from 'expo-linking';
 import type { AppConfig, ChatMessage, Venue } from '../../src/types';
 import { api, API_BASE } from '../../src/api';
 import { isEventActive } from '../../src/event-window';
+import { dollars, formatUsd } from '../../src/money';
+import { getStoredPushToken } from '../../src/notifications';
 import { useVenueContext } from '../../src/venue-context';
 import { usePrefsContext } from '../../src/prefs-context';
 import {
@@ -34,14 +36,15 @@ export default function EventScreen() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [showPay, setShowPay] = useState(false);
   const [showTip, setShowTip] = useState(false);
-  const [showMessage, setShowMessage] = useState(false);
   const [showLineup, setShowLineup] = useState(false);
 
   useEffect(() => {
     api.getConfig().then(setConfig).catch(() => setConfig(null));
   }, []);
 
-  // Handle deep link redirects from Stripe checkout (thehopper://payment-success|payment-cancelled)
+  // Handle deep link redirects from Stripe checkout
+  // (karaokespot://payment-success|payment-cancelled). The scheme is set by
+  // `scheme` in app.json and mirrored by APP_URL_SCHEME in the backend.
   useEffect(() => {
     const handleDeepLink = (url: string | null) => {
       if (!url) return;
@@ -52,7 +55,6 @@ export default function EventScreen() {
         return;
       }
       const path = parsed.path || '';
-      const params = parsed.queryParams || {};
       if (path === 'payment-success') {
         WebBrowser.dismissBrowser();
         Alert.alert(
@@ -121,9 +123,19 @@ export default function EventScreen() {
 
       {eventActive ? (
         <>
-          {/* Chat fills the remaining space */}
-          <View style={styles.chatSection}>
-            <ChatPanel venue={venue} />
+          {/* Live-event panel. Public venue chat is intentionally not shipped in
+              the MVP — an unmoderated room open to a whole bar is an abuse and
+              harassment surface we are not staffed to police. ChatPanel and its
+              API methods are left intact below so it can be restored behind
+              moderation later. Singers can still reach the host privately via
+              Message KJ. */}
+          <View style={styles.liveSection}>
+            <Text style={styles.liveBadge}>● LIVE NOW</Text>
+            <Text style={styles.liveTitle}>Karaoke is on at {venue.name}</Text>
+            <Text style={styles.liveBody}>
+              Get in line for your turn, move up the queue if you'd rather sing
+              sooner, or send your host a message.
+            </Text>
           </View>
 
           {/* Action buttons anchored at bottom */}
@@ -141,7 +153,7 @@ export default function EventScreen() {
               style={({ pressed }) => [styles.subtleBtn, pressed && styles.subtleBtnPressed]}
             >
               <Text style={styles.subtleBtnText}>
-                Skip The Line · ${venue.price_jump_queue.toFixed(2)}
+                Move Up in Line · {formatUsd(venue.price_jump_queue)}
               </Text>
             </Pressable>
             <Pressable
@@ -155,7 +167,8 @@ export default function EventScreen() {
           </View>
         </>
       ) : (
-        /* Outside event window: show Tip KJ and Message KJ */
+        /* Outside event window: tipping still works, and the tip carries an
+           optional note, so there is no separate Message KJ action. */
         <View style={styles.offEventSection}>
           <Text style={styles.offEventText}>
             No live event right now. Karaoke nights: {venue.karaoke_nights.join(', ')}.
@@ -165,12 +178,6 @@ export default function EventScreen() {
             style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnTip, pressed && styles.subtleBtnPressed]}
           >
             <Text style={styles.subtleBtnText}>💰 Tip KJ</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setShowMessage(true)}
-            style={({ pressed }) => [styles.subtleBtn, pressed && styles.subtleBtnPressed]}
-          >
-            <Text style={styles.subtleBtnText}>✉️ Message KJ</Text>
           </Pressable>
         </View>
       )}
@@ -188,11 +195,6 @@ export default function EventScreen() {
         visible={showTip}
         onClose={() => setShowTip(false)}
       />
-      <MessageKJModal
-        venue={venue}
-        visible={showMessage}
-        onClose={() => setShowMessage(false)}
-      />
       <GetInLineModal
         venue={venue}
         visible={showLineup}
@@ -204,9 +206,15 @@ export default function EventScreen() {
 
 // ---------------------------------------------------------------------------
 // Chat panel — inline (not a modal) on the Event tab
+//
+// NOT RENDERED IN THE MVP. Kept whole, along with its styles and the
+// getVenueChat/postVenueChat API methods, so public venue chat can be restored
+// once there is a moderation story (reporting, blocking, KJ mute/kick). It is
+// exported rather than deleted to keep it compiling and honest about intent.
+// The backend chat endpoints and WebSocket remain in place and unused.
 // ---------------------------------------------------------------------------
 
-function ChatPanel({ venue }: { venue: Venue }) {
+export function ChatPanel({ venue }: { venue: Venue }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [nickname, setNickname] = useState('');
   const [draft, setDraft] = useState('');
@@ -372,7 +380,7 @@ function ChatPanel({ venue }: { venue: Venue }) {
 }
 
 // ---------------------------------------------------------------------------
-// Jump Queue modal
+// Move Up in Queue modal
 // ---------------------------------------------------------------------------
 
 function PaymentModal({
@@ -464,12 +472,12 @@ function PaymentModal({
           <Pressable style={styles.modalClose} onPress={onClose} hitSlop={12}>
             <Text style={styles.modalCloseText}>×</Text>
           </Pressable>
-          <Text style={styles.modalTitle}>⏭️ Jump the Queue</Text>
+          <Text style={styles.modalTitle}>⏭️ Move Up in the Queue</Text>
           <Text style={styles.modalSub}>
             {venue.name} · KJ: {venue.kj_name || 'TBA'}
           </Text>
           <View style={styles.priceDisplay}>
-            <Text style={styles.priceAmount}>${venue.price_jump_queue.toFixed(2)}</Text>
+            <Text style={styles.priceAmount}>{formatUsd(venue.price_jump_queue)}</Text>
             <Text style={styles.priceLabel}> to sing soon</Text>
           </View>
 
@@ -506,7 +514,7 @@ function PaymentModal({
             label={
               submitting
                 ? 'Creating checkout…'
-                : `Pay $${venue.price_jump_queue.toFixed(2)} & skip line`
+                : `Pay ${formatUsd(venue.price_jump_queue)} & move up`
             }
             onPress={submit}
             disabled={submitting}
@@ -523,6 +531,11 @@ function PaymentModal({
 
 const TIP_PRESETS = [3, 5, 10, 20];
 
+// Mirrors MIN_TIP_USD / MAX_TIP_USD in the backend. Checked here too so an
+// out-of-range amount reads as a clear message rather than a server error.
+const MIN_TIP_USD = 1;
+const MAX_TIP_USD = 500;
+
 function TipModal({
   venue,
   stripeConfigured,
@@ -534,14 +547,20 @@ function TipModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const [prefs, updatePrefs] = usePrefsContext();
   const [tipAmount, setTipAmount] = useState(5);
+  const [singer, setSinger] = useState('');
+  const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (!visible) {
+    if (visible) {
+      setSinger(prefs.singer_name || '');
+    } else {
       setTipAmount(5);
+      setNote('');
       setSubmitting(false);
       setError(null);
       setSuccess(false);
@@ -549,16 +568,29 @@ function TipModal({
   }, [visible]);
 
   const submit = async () => {
+    const amount = dollars(tipAmount);
+    if (amount < MIN_TIP_USD || amount > MAX_TIP_USD) {
+      setError(`Tip must be between $${MIN_TIP_USD} and $${MAX_TIP_USD}`);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      // Placeholder: use createPaymentSession with the tip amount in the song_request field.
-      // The backend can interpret this as a tip (venue_id + amount).
+      const nameVal = singer.trim() || 'Anonymous';
+      // The tip rides the payment session: amount in the request field, with the
+      // note appended. Sending it as part of the payment keeps the two atomic —
+      // a separate message call would leave the KJ with an orphaned note if the
+      // customer abandoned checkout. The backend parses the TIP: prefix.
+      const noteVal = note.trim();
       const res = await api.createPaymentSession(
         venue.id,
-        'Tipper',
-        `TIP:$${tipAmount.toFixed(2)}`,
+        nameVal,
+        `TIP:${formatUsd(tipAmount)}${noteVal ? ` — ${noteVal}` : ''}`,
+        { kind: 'tip', tip_amount_usd: dollars(tipAmount) },
       );
+      if (nameVal !== 'Anonymous') {
+        updatePrefs((p) => ({ ...p, singer_name: nameVal }));
+      }
       let url = res.checkout_url;
       if (url.startsWith('/')) {
         url = `${API_BASE.replace(/\/api$/, '')}${url}`;
@@ -629,14 +661,37 @@ function TipModal({
           <Text style={styles.fieldLabel}>Custom amount</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter $ amount"
+            placeholder="Enter whole $ amount"
             placeholderTextColor={Colors.textMute}
             value={tipAmount > 0 ? String(tipAmount) : ''}
             onChangeText={(v) => {
-              const n = parseFloat(v);
-              setTipAmount(isNaN(n) || n < 0 ? 0 : n);
+              // Whole dollars only — strip anything that is not a digit so a
+              // stray decimal point cannot produce a cents amount.
+              const n = parseInt(v.replace(/\D/g, ''), 10);
+              setTipAmount(isNaN(n) ? 0 : n);
             }}
-            keyboardType="decimal-pad"
+            keyboardType="number-pad"
+          />
+
+          <Text style={styles.fieldLabel}>Your name (optional)</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Anonymous"
+            placeholderTextColor={Colors.textMute}
+            value={singer}
+            onChangeText={setSinger}
+            maxLength={60}
+          />
+
+          <Text style={styles.fieldLabel}>Add a note (optional)</Text>
+          <TextInput
+            style={[styles.input, styles.noteInput]}
+            placeholder="Say hi, request a song, thank your KJ…"
+            placeholderTextColor={Colors.textMute}
+            value={note}
+            onChangeText={setNote}
+            maxLength={200}
+            multiline
           />
 
           {error && <Banner message={`⚠️ ${error}`} variant="warn" />}
@@ -645,7 +700,7 @@ function TipModal({
           )}
 
           <Button
-            label={submitting ? 'Creating checkout…' : `Tip $${tipAmount.toFixed(2)}`}
+            label={submitting ? 'Creating checkout…' : `Tip ${formatUsd(tipAmount)}`}
             onPress={submit}
             disabled={submitting || tipAmount <= 0}
           />
@@ -657,9 +712,14 @@ function TipModal({
 
 // ---------------------------------------------------------------------------
 // Message KJ Modal
+//
+// NOT RENDERED IN THE MVP. The tip flow now carries an optional note, so a
+// standalone "Message KJ" action was redundant. Kept, like ChatPanel, so a
+// free-standing message channel can be restored without rebuilding it — the
+// sendKJMessage API method and its backend endpoint remain in place.
 // ---------------------------------------------------------------------------
 
-function MessageKJModal({
+export function MessageKJModal({
   venue,
   visible,
   onClose,
@@ -840,13 +900,16 @@ function GetInLineModal({
     try {
       const nameVal = singer.trim() || 'Anonymous Singer';
       const phoneVal = phone.trim();
-      await api.sendKJMessage(
-        venue.id,
-        nameVal,
-        `QUEUE: I'd like to sing!`,
-        song.trim(),
-        phoneVal || undefined,
-      );
+      // Hand over the push token so the KJ can call this singer up later. The
+      // device row itself has no phone attached, so without this the only way
+      // to reach them is SMS — and only if they left a number.
+      const pushToken = await getStoredPushToken().catch(() => null);
+      await api.joinLineup(venue.id, {
+        singer_name: nameVal,
+        singer_phone: phoneVal || undefined,
+        song_request: song.trim() || undefined,
+        push_token: pushToken || undefined,
+      });
       updatePrefs((p) => ({ ...p, singer_name: nameVal !== 'Anonymous Singer' ? nameVal : p.singer_name, singer_phone: phoneVal || p.singer_phone }));
       setSent(true);
       setTimeout(onClose, 1500);
@@ -1007,6 +1070,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
+    // Buttons share the row evenly, so longer labels wrap to two lines — without
+    // this the wrapped line sits left-aligned inside a centred button.
+    textAlign: 'center',
+  },
+  noteInput: {
+    minHeight: 72,
+    paddingTop: 10,
+    textAlignVertical: 'top',
   },
   testModeNote: {
     marginTop: Spacing.sm,
@@ -1015,6 +1086,33 @@ const styles = StyleSheet.create({
   },
 
   // Chat section — fills remaining space between header and action bar
+  liveSection: {
+    flex: 1,
+    padding: Spacing.lg,
+    paddingBottom: 0,
+    justifyContent: 'center',
+  },
+  liveBadge: {
+    color: Colors.pink,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  liveTitle: {
+    ...Typography.title,
+    color: Colors.text,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  liveBody: {
+    color: Colors.textDim,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  // Retained for ChatPanel — see the note on that component.
   chatSection: {
     flex: 1,
     padding: Spacing.lg,

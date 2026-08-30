@@ -7,7 +7,7 @@
  */
 import { getItem, setItem } from './secure-storage';
 
-const SESSION_TOKEN_KEY = 'thehopper_session_token';
+const SESSION_TOKEN_KEY = 'karaokespot_session_token';
 
 export function getSessionToken(): Promise<string | null> {
   return getItem(SESSION_TOKEN_KEY).catch(() => null);

@@ -1,0 +1,8 @@
+source "https://rubygems.org"
+
+# Pin fastlane so local and CI runs behave identically. Update deliberately
+# with `bundle update fastlane`, not implicitly.
+gem "fastlane", "~> 2.228"
+
+# CocoaPods is required to build the iOS workspace this project generates.
+gem "cocoapods", "~> 1.16"
