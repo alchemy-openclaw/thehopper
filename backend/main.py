@@ -3764,6 +3764,7 @@ async def kj_subdomain_middleware(request: Request, call_next):
 # ---------------------------------------------------------------------------
 
 if FRONTEND_DIST.exists():
+    app.mount("/thehopper/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="thehopper-assets")
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
     @app.get("/{full_path:path}")
