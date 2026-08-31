@@ -13,7 +13,8 @@
       "bundleIdentifier": "co.launchable.karaokespot",
       "buildNumber": "1",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "KaraokeSpot uses your location to find karaoke venues near you."
+        "NSLocationWhenInUseUsageDescription": "KaraokeSpot uses your location to find karaoke venues near you.",
+        "NSPhotoLibraryUsageDescription": "Choose a photo to show other singers what this venue looks like."
       },
       "entitlements": {
         "com.apple.developer.usernotifications.time-sensitive": true

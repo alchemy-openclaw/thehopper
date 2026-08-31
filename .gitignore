@@ -8,3 +8,6 @@ dist/
 build/
 *.db
 .DS_Store
+
+# Uploaded venue photos (user content, not source)
+backend/media/

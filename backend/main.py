@@ -32,7 +32,18 @@ from urllib.parse import urlencode
 from urllib.request import Request as UrllibRequest, urlopen
 
 import stripe
-from fastapi import FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+import pathlib
+from fastapi import (
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -457,6 +468,20 @@ def init_db() -> None:
                 "ALTER TABLE kjs ADD COLUMN song_request_required INTEGER NOT NULL DEFAULT 0"
             )
 
+        # Migration: a community-contributed photo for the venue, shown behind
+        # the header on the event screen.
+        vcols = {row["name"] for row in conn.execute("PRAGMA table_info(venues)")}
+        if "image_url" not in vcols:
+            conn.execute("ALTER TABLE venues ADD COLUMN image_url TEXT")
+
+        # Migration: how a KJ wants to be alerted about payments and singers.
+        # Both default on — a KJ who misses a paid premium slot has taken money
+        # for something they never delivered, so opting out has to be explicit.
+        if "notify_push" not in kj_cols:
+            conn.execute("ALTER TABLE kjs ADD COLUMN notify_push INTEGER NOT NULL DEFAULT 1")
+        if "notify_sms" not in kj_cols:
+            conn.execute("ALTER TABLE kjs ADD COLUMN notify_sms INTEGER NOT NULL DEFAULT 1")
+
         # Patrons table — tiny profiles so KJs can reply
         conn.executescript(
             """
@@ -641,26 +666,74 @@ def send_push(
         print(f"[Push] Error: {e}")
 
 
-def notify_kj_for_venue(conn: sqlite3.Connection, venue_id: int, title: str, body: str, data: dict | None = None) -> None:
-    """Send push + SMS to the KJ associated with a venue."""
-    venue = conn.execute("SELECT kj_id, kj_name, phone FROM venues WHERE id = ?", (venue_id,)).fetchone()
+def notify_kj_for_venue(
+    conn: sqlite3.Connection,
+    venue_id: int,
+    title: str,
+    body: str,
+    data: dict | None = None,
+    time_sensitive: bool = False,
+) -> None:
+    """Alert the KJ hosting a venue, by whichever channels they have enabled."""
+    venue = conn.execute(
+        "SELECT kj_id, kj_name, phone FROM venues WHERE id = ?", (venue_id,)
+    ).fetchone()
     if not venue:
         return
     kj_id = venue["kj_id"] if "kj_id" in venue.keys() else None
-    # Push notification
+
+    kj = None
     if kj_id:
-        devices = conn.execute("SELECT push_token FROM devices WHERE kj_id = ?", (kj_id,)).fetchall()
+        kj = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
+
+    def pref(name: str, default: bool = True) -> bool:
+        if kj is None or name not in kj.keys() or kj[name] is None:
+            return default
+        return bool(kj[name])
+
+    if kj_id and pref("notify_push"):
+        devices = conn.execute(
+            "SELECT push_token FROM devices WHERE kj_id = ?", (kj_id,)
+        ).fetchall()
         tokens = [d["push_token"] for d in devices]
-        send_push(tokens, title, body, data)
-    # SMS fallback
-    phone = venue["phone"] if venue["phone"] else None
-    if phone:
-        send_sms(phone, f"{title}: {body}")
+        send_push(tokens, title, body, data, time_sensitive=time_sensitive)
+
+    if pref("notify_sms"):
+        # Text the KJ's own verified number. This used to text venues.phone —
+        # the bar's public contact line — so alerts meant for the host went to
+        # whoever answers the phone at the venue, if anyone.
+        phone = kj["phone"] if kj is not None else None
+        if not phone:
+            phone = venue["phone"] or None
+        if phone:
+            send_sms(phone, f"{title}: {body}")
 
 
 # ---------------------------------------------------------------------------
 # Phone verification helpers
 # ---------------------------------------------------------------------------
+
+
+WEEKDAY_NAMES = {
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+}
+
+
+def has_real_schedule(karaoke_nights: Any, start_time: Any) -> bool:
+    """True when a venue has a night a singer could actually turn up to.
+
+    Rejects three things seen in imported data:
+      - no nights at all (bulk licence-list imports)
+      - placeholder values like "TBD", which are non-empty but not a day
+      - a night with no start time
+
+    Day names are trimmed and lowercased because real rows arrive as
+    "Saturday, Sunday, Thursday", which splits with leading spaces.
+    """
+    nights = str(karaoke_nights or "").split(",")
+    if not any(n.strip().lower() in WEEKDAY_NAMES for n in nights):
+        return False
+    return bool(str(start_time or "").strip())
 
 
 def normalize_phone(phone: str) -> str:
@@ -847,6 +920,7 @@ class VenueOut(BaseModel):
     price_jump_queue: int
     premium_slot_position: int = 3
     premium_slot_price: int = 5
+    image_url: str | None = None
     vibe: str | None
     distance_miles: float | None = None
     stripe_account_id: str | None = None
@@ -995,6 +1069,8 @@ class KJOut(BaseModel):
     site_slug: str | None = None
     city: str | None = None
     song_request_required: bool = False
+    notify_push: bool = True
+    notify_sms: bool = True
 
 
 class LineupJoinRequest(BaseModel):
@@ -1080,6 +1156,7 @@ def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None, kj_song_r
         "price_jump_queue": whole_dollars(row["price_jump_queue"]),
         "premium_slot_position": row["premium_slot_position"],
         "premium_slot_price": whole_dollars(row["premium_slot_price"]),
+        "image_url": row["image_url"] if "image_url" in row.keys() else None,
         "vibe": row["vibe"],
         "distance_miles": round(distance, 1) if distance is not None else None,
         "stripe_account_id": row["stripe_account_id"] if "stripe_account_id" in row.keys() else None,
@@ -1252,10 +1329,25 @@ def list_venues(
     lat: float | None = Query(None, description="User latitude"),
     lng: float | None = Query(None, description="User longitude"),
     city: str | None = Query(None, description="Filter by city name"),
+    include_unscheduled: bool = Query(
+        False,
+        description="Include venues that have no karaoke nights set (admin/import review)",
+    ),
 ):
-    """List karaoke venues, optionally sorted by distance from (lat,lng)."""
+    """List karaoke venues, optionally sorted by distance from (lat,lng).
+
+    Venues with no karaoke nights are excluded by default. A bulk import can
+    easily add hundreds of bars that have not had a schedule filled in yet, and
+    a singer cannot do anything with a venue that has no night — it is not a
+    place to sing, it is just an address.
+    """
     with db() as conn:
         rows = conn.execute("SELECT * FROM venues").fetchall()
+        if not include_unscheduled:
+            rows = [
+                r for r in rows
+                if has_real_schedule(r["karaoke_nights"], r["start_time"])
+            ]
         # Build a map of kj_id -> song_request_required for all KJs
         kj_req_map: dict[int, bool] = {}
         kj_rows = conn.execute("SELECT id, song_request_required FROM kjs").fetchall()
@@ -1590,6 +1682,108 @@ def list_songs(
         params.append(limit)
         rows = conn.execute(q, params).fetchall()
     return [song_row_to_dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# API: venue photos
+# ---------------------------------------------------------------------------
+
+# Where uploaded venue photos live, served back at /media/venues/<file>.
+MEDIA_DIR = BASE_DIR / "media" / "venues"
+
+MAX_IMAGE_BYTES = 6 * 1024 * 1024  # ~6MB; the app downscales before sending
+
+# Sniff the actual bytes rather than trusting the declared content type or the
+# filename — either can claim to be a JPEG while carrying something else.
+IMAGE_MAGIC: list[tuple[bytes, str]] = [
+    (b"\xff\xd8\xff", ".jpg"),           # JPEG
+    (b"\x89PNG\r\n\x1a\n", ".png"),      # PNG
+]
+
+
+def _sniff_image_ext(head: bytes) -> str | None:
+    for magic, ext in IMAGE_MAGIC:
+        if head.startswith(magic):
+            return ext
+    return None
+
+
+@app.post(f"{API_PREFIX}/venues/{{venue_id}}/image", response_model=VenueOut)
+async def upload_venue_image(
+    venue_id: int,
+    file: UploadFile = File(...),
+    x_session_token: str | None = Header(default=None),
+):
+    """Attach a photo to a venue.
+
+    Open to any app user while the venue has no photo — the point is local
+    flavour, and requiring a KJ account would mean most venues never get one.
+    Replacing an existing photo is restricted to the venue's KJ, so the first
+    contribution cannot be painted over by the next passer-by.
+    """
+    with db() as conn:
+        venue = conn.execute("SELECT * FROM venues WHERE id=?", (venue_id,)).fetchone()
+        if not venue:
+            raise HTTPException(status_code=404, detail="Venue not found")
+        existing = venue["image_url"] if "image_url" in venue.keys() else None
+        if existing:
+            # Only the host may replace. Raises 401/403 on their behalf.
+            _require_venue_kj(conn, venue_id, x_session_token)
+
+    data = await file.read(MAX_IMAGE_BYTES + 1)
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image too large (max {MAX_IMAGE_BYTES // (1024 * 1024)}MB)",
+        )
+    ext = _sniff_image_ext(data[:16])
+    if not ext:
+        raise HTTPException(status_code=400, detail="Only JPEG and PNG images are accepted")
+
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    # Random name: the original filename is attacker-controlled and could
+    # traverse or collide.
+    filename = f"venue-{venue_id}-{secrets.token_hex(8)}{ext}"
+    (MEDIA_DIR / filename).write_bytes(data)
+    url = f"/media/venues/{filename}"
+
+    with db() as conn:
+        conn.execute("UPDATE venues SET image_url=? WHERE id=?", (url, venue_id))
+        row = conn.execute("SELECT * FROM venues WHERE id=?", (venue_id,)).fetchone()
+
+    # Best-effort cleanup of the file being replaced.
+    if existing and existing.startswith("/media/venues/"):
+        old = MEDIA_DIR / pathlib.Path(existing).name
+        try:
+            old.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    return venue_row_to_dict(row)
+
+
+@app.delete(f"{API_PREFIX}/venues/{{venue_id}}/image", response_model=VenueOut)
+def delete_venue_image(venue_id: int, x_session_token: str | None = Header(default=None)):
+    """Remove a venue photo. KJ only — this is the moderation lever for a
+    photo a host does not want representing their room."""
+    with db() as conn:
+        venue = conn.execute("SELECT * FROM venues WHERE id=?", (venue_id,)).fetchone()
+        if not venue:
+            raise HTTPException(status_code=404, detail="Venue not found")
+        _require_venue_kj(conn, venue_id, x_session_token)
+        existing = venue["image_url"] if "image_url" in venue.keys() else None
+        conn.execute("UPDATE venues SET image_url=NULL WHERE id=?", (venue_id,))
+        row = conn.execute("SELECT * FROM venues WHERE id=?", (venue_id,)).fetchone()
+
+    if existing and existing.startswith("/media/venues/"):
+        try:
+            (MEDIA_DIR / pathlib.Path(existing).name).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    return venue_row_to_dict(row)
 
 
 # ---------------------------------------------------------------------------
@@ -2871,6 +3065,8 @@ def _kj_row_to_out(row: sqlite3.Row) -> KJOut:
         site_slug=row["site_slug"] if "site_slug" in keys else None,
         city=row["city"] if "city" in keys else None,
         song_request_required=bool(row["song_request_required"]) if "song_request_required" in keys else False,
+        notify_push=bool(row["notify_push"]) if "notify_push" in keys else True,
+        notify_sms=bool(row["notify_sms"]) if "notify_sms" in keys else True,
     )
 
 
@@ -2984,8 +3180,13 @@ def get_kj(kj_id: int):
 
 
 @app.patch(f"{API_PREFIX}/kjs/{{kj_id}}/settings", response_model=KJOut)
-def update_kj_settings(kj_id: int, song_request_required: bool | None = None):
-    """Update KJ preferences. Currently supports song_request_required."""
+def update_kj_settings(
+    kj_id: int,
+    song_request_required: bool | None = None,
+    notify_push: bool | None = None,
+    notify_sms: bool | None = None,
+):
+    """Update KJ preferences: song requests and how they want to be alerted."""
     with db() as conn:
         row = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
         if not row:
@@ -2994,6 +3195,16 @@ def update_kj_settings(kj_id: int, song_request_required: bool | None = None):
             conn.execute(
                 "UPDATE kjs SET song_request_required=? WHERE id=?",
                 (1 if song_request_required else 0, kj_id),
+            )
+        if notify_push is not None:
+            conn.execute(
+                "UPDATE kjs SET notify_push=? WHERE id=?",
+                (1 if notify_push else 0, kj_id),
+            )
+        if notify_sms is not None:
+            conn.execute(
+                "UPDATE kjs SET notify_sms=? WHERE id=?",
+                (1 if notify_sms else 0, kj_id),
             )
         row = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
     return _kj_row_to_out(row)
@@ -4082,6 +4293,12 @@ async def kj_subdomain_middleware(request: Request, call_next):
                     media_type="text/html",
                 )
     return await call_next(request)
+
+
+# Uploaded venue photos. Mounted before the SPA catch-all so /media/... resolves
+# to the file rather than the app shell.
+MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/media/venues", StaticFiles(directory=MEDIA_DIR), name="venue-media")
 
 
 # ---------------------------------------------------------------------------

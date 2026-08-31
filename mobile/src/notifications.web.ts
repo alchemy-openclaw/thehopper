@@ -16,6 +16,14 @@ export async function updateDeviceMetadata(_data: {
   // no-op on web
 }
 
+export async function hasPushPermission(): Promise<boolean> {
+  return false;
+}
+
+export async function requestPushPermission(): Promise<boolean> {
+  return false;
+}
+
 export async function getStoredPushToken(): Promise<string | null> {
   return null;
 }

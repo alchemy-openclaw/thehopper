@@ -174,6 +174,43 @@ export const api = {
       body: JSON.stringify({ name, phone }),
     }),
 
+  // --- Venue photos ---
+
+  /**
+   * Upload a venue photo. Anyone may add one while the venue has none;
+   * replacing an existing photo requires the venue's KJ session token.
+   *
+   * Sent as multipart rather than base64 to avoid inflating a phone photo by a
+   * third on the way up.
+   */
+  uploadVenueImage: (venue_id: number, uri: string, session_token?: string) => {
+    const name = uri.split('/').pop() || 'photo.jpg';
+    const ext = name.split('.').pop()?.toLowerCase();
+    const type = ext === 'png' ? 'image/png' : 'image/jpeg';
+    const form = new FormData();
+    // React Native's FormData takes this {uri,name,type} shape, which is not
+    // the DOM File the TS lib types describe.
+    form.append('file', { uri, name, type } as unknown as Blob);
+    return jsonFetch<Venue>(`${API_BASE}/venues/${venue_id}/image`, {
+      method: 'POST',
+      // Content-Type is deliberately unset: fetch must add the multipart
+      // boundary itself, and setting it manually breaks the upload.
+      headers: session_token ? { 'X-Session-Token': session_token } : undefined,
+      body: form,
+    });
+  },
+
+  /** Remove a venue photo. KJ only. */
+  deleteVenueImage: (venue_id: number, session_token: string) =>
+    jsonFetch<Venue>(`${API_BASE}/venues/${venue_id}/image`, {
+      method: 'DELETE',
+      headers: { 'X-Session-Token': session_token },
+    }),
+
+  /** Absolute URL for a stored media path. */
+  mediaUrl: (path: string) =>
+    path.startsWith('http') ? path : `${API_BASE.replace(/\/api$/, '')}${path}`,
+
   // --- Lineup (pending singers) ---
 
   /** Put a singer on a venue's pending list. */
@@ -287,10 +324,23 @@ export const api = {
 
   getKJVenues: (kj_id: number) => jsonFetch<Venue[]>(`${API_BASE}/kjs/${kj_id}/venues`),
 
-  updateKJSettings: (kj_id: number, song_request_required: boolean) =>
-    jsonFetch<KJ>(`${API_BASE}/kjs/${kj_id}/settings?song_request_required=${song_request_required}`, {
+  /** Update one or more KJ preferences. Omitted fields are left unchanged. */
+  updateKJSettings: (
+    kj_id: number,
+    settings: {
+      song_request_required?: boolean;
+      notify_push?: boolean;
+      notify_sms?: boolean;
+    },
+  ) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(settings)) {
+      if (v != null) params.set(k, String(v));
+    }
+    return jsonFetch<KJ>(`${API_BASE}/kjs/${kj_id}/settings?${params.toString()}`, {
       method: 'PATCH',
-    }),
+    });
+  },
 
   kjStripeOnboard: (kj_id: number, email: string, kyc?: {
     business_name?: string;

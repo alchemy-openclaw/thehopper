@@ -18,6 +18,8 @@ import * as WebBrowser from 'expo-web-browser';
 import { api } from '../../src/api';
 import { getSessionToken } from '../../src/session';
 import { pickLineupVenue } from '../../src/event-window';
+import { formatTimeRange } from '../../src/format';
+import { hasPushPermission, requestPushPermission } from '../../src/notifications';
 import type { KJ, LineupEntry, Venue, StripeStatusResponse } from '../../src/types';
 import {
   Banner,
@@ -45,6 +47,14 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
   const [error, setError] = useState<string | null>(null);
   const [songRequired, setSongRequired] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [notifyPush, setNotifyPush] = useState(true);
+  const [notifySms, setNotifySms] = useState(true);
+  // Tracks the OS-level permission, which can contradict the KJ's own setting.
+  const [pushBlocked, setPushBlocked] = useState(false);
+
+  const checkPushPermission = useCallback(async () => {
+    setPushBlocked(!(await hasPushPermission()));
+  }, []);
 
   // Pending singers for whichever venue is on right now, or starting within the
   // hour. Simultaneous locations are a later problem — picking by the clock is
@@ -67,7 +77,10 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
         setVenues(venuesData);
         setStripeStatus(stripeData);
         setSongRequired(kjData.song_request_required ?? false);
+        setNotifyPush(kjData.notify_push ?? true);
+        setNotifySms(kjData.notify_sms ?? true);
         setLineupVenue(pickLineupVenue(venuesData));
+        checkPushPermission();
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load KJ'))
       .finally(() => setLoading(false));
@@ -152,10 +165,39 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
     setSongRequired(newVal);
     setSavingSettings(true);
     try {
-      const updated = await api.updateKJSettings(kjId, newVal);
+      const updated = await api.updateKJSettings(kjId, { song_request_required: newVal });
       setKJ(updated);
     } catch (e) {
       setSongRequired(!newVal); // revert on failure
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const toggleNotify = async (channel: 'notify_push' | 'notify_sms') => {
+    const current = channel === 'notify_push' ? notifyPush : notifySms;
+    const newVal = !current;
+    // Both channels off means a paid premium slot reaches nobody, and the
+    // singer has already been charged. Refuse rather than let it happen quietly.
+    const otherOn = channel === 'notify_push' ? notifySms : notifyPush;
+    if (!newVal && !otherOn) {
+      Alert.alert(
+        'Keep one alert on',
+        'Turning both off means you would not hear about paid slots or singers waiting. Leave at least one channel enabled.',
+      );
+      return;
+    }
+    if (channel === 'notify_push') setNotifyPush(newVal);
+    else setNotifySms(newVal);
+    setSavingSettings(true);
+    try {
+      const updated = await api.updateKJSettings(kjId, { [channel]: newVal });
+      setKJ(updated);
+      if (channel === 'notify_push' && newVal) await checkPushPermission();
+    } catch (e) {
+      if (channel === 'notify_push') setNotifyPush(!newVal);
+      else setNotifySms(!newVal);
       Alert.alert('Error', e instanceof Error ? e.message : 'Could not update settings');
     } finally {
       setSavingSettings(false);
@@ -243,7 +285,7 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
                     {entry.status === 'notified' ? ' · called up' : ''}
                   </Text>
                   {entry.song_request ? (
-                    <Text style={styles.lineupSong}>🎵 {entry.song_request}</Text>
+                    <Text style={styles.lineupSong}>{entry.song_request}</Text>
                   ) : null}
                   {!entry.can_notify && (
                     <Text style={styles.lineupNoContact}>
@@ -316,6 +358,71 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
             <View style={[styles.toggleKnob, songRequired && styles.toggleKnobOn]} />
           </View>
         </Pressable>
+
+        <Text style={styles.subsectionLabel}>How we reach you</Text>
+
+        <Pressable
+          onPress={() => toggleNotify('notify_push')}
+          disabled={savingSettings}
+          style={styles.toggleRow}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleLabel}>Push notifications</Text>
+            <Text style={styles.toggleDesc}>
+              Paid slots and singers waiting, straight to this phone.
+            </Text>
+          </View>
+          <View style={[styles.toggleSwitch, notifyPush && styles.toggleSwitchOn]}>
+            <View style={[styles.toggleKnob, notifyPush && styles.toggleKnobOn]} />
+          </View>
+        </Pressable>
+
+        {/* The setting can say push is on while iOS drops every alert. Say so,
+            and offer the fix, rather than letting them miss a paid slot. */}
+        {notifyPush && pushBlocked && (
+          <View style={styles.permWarn}>
+            <Text style={styles.permWarnText}>
+              ⚠️ Notifications are turned off for KaraokeSpot on this phone, so
+              push alerts won't arrive.
+            </Text>
+            <Button
+              label="Turn on notifications"
+              variant="secondary"
+              onPress={async () => {
+                const granted = await requestPushPermission();
+                setPushBlocked(!granted);
+                if (!granted) {
+                  Alert.alert(
+                    'Enable in Settings',
+                    'iOS will not ask again. Open Settings › KaraokeSpot › Notifications and switch them on.',
+                    [
+                      { text: 'Not now', style: 'cancel' },
+                      { text: 'Open Settings', onPress: () => Linking.openSettings() },
+                    ],
+                  );
+                }
+              }}
+            />
+          </View>
+        )}
+
+        <Pressable
+          onPress={() => toggleNotify('notify_sms')}
+          disabled={savingSettings}
+          style={styles.toggleRow}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleLabel}>Text messages</Text>
+            <Text style={styles.toggleDesc}>
+              {kj.phone
+                ? `Sent to ${kj.phone}. Works even with the app closed.`
+                : 'Works even with the app closed.'}
+            </Text>
+          </View>
+          <View style={[styles.toggleSwitch, notifySms && styles.toggleSwitchOn]}>
+            <View style={[styles.toggleKnob, notifySms && styles.toggleKnobOn]} />
+          </View>
+        </Pressable>
       </Card>
 
       {/* Venues */}
@@ -336,7 +443,7 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
               {v.karaoke_nights.map((n) => (
                 <MetaPill key={n} label={n} variant="nights" />
               ))}
-              <MetaPill label={`🕘 ${v.start_time}–${v.end_time}`} />
+              <MetaPill label={formatTimeRange(v.start_time, v.end_time)} />
             </View>
             {v.vibe ? <Text style={styles.venueVibe}>{v.vibe}</Text> : null}
           </Card>
@@ -378,6 +485,25 @@ const styles = StyleSheet.create({
   lineupNoContact: { color: Colors.textMute, fontSize: 12, marginTop: 2 },
   lineupActions: { alignItems: 'flex-end', gap: 4 },
   lineupDone: { color: Colors.textMute, fontSize: 13, paddingVertical: 4 },
+  subsectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMute,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.xs,
+  },
+  permWarn: {
+    backgroundColor: Colors.bg2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  permWarnText: { color: Colors.textDim, fontSize: 13, lineHeight: 19 },
   sectionLabel: {
     fontSize: 13,
     fontWeight: '700',

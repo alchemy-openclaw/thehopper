@@ -15,6 +15,8 @@ export interface Venue {
   website: string | null;
   price_jump_queue: number;
   vibe: string | null;
+  /** Community-contributed venue photo, as a path like /media/venues/x.jpg. */
+  image_url?: string | null;
   distance_miles: number | null;
   song_request_required: boolean;
 }
@@ -130,6 +132,9 @@ export interface KJ {
   site_slug?: string | null;
   city?: string | null;
   song_request_required?: boolean;
+  /** How the KJ wants to be alerted about payments and singers. */
+  notify_push?: boolean;
+  notify_sms?: boolean;
 }
 
 export interface PhoneVerifyResponse {

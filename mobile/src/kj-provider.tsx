@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { KJContext, type KJState } from './kj-context';
 import { api } from './api';
 import { getSessionToken } from './session';
+import { updateDeviceMetadata } from './notifications';
 import type { KJ } from './types';
 
 /**
@@ -27,7 +28,13 @@ export function KJProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      setKJ(await api.getMyKJ(token));
+      const me = await api.getMyKJ(token);
+      setKJ(me);
+      // Bind this device's push token to the KJ. The backend fans out alerts
+      // via `devices WHERE kj_id = ?`, so without this the token list is always
+      // empty and KJ push silently never arrives — it only looked like it
+      // worked because SMS was going out alongside it.
+      updateDeviceMetadata({ kj_id: me.id, phone: me.phone }).catch(() => {});
     } catch {
       // 404 → not a KJ; 401 → expired token; anything else → offline. All of
       // them mean "no KJ surfaces", which beats showing a tab that errors.

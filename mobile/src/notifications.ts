@@ -81,6 +81,28 @@ export async function updateDeviceMetadata(data: {
   }
 }
 
+/**
+ * Whether the OS currently allows notifications.
+ *
+ * A KJ can have push enabled in their profile while iOS silently drops every
+ * alert because permission was denied at install. That gap is invisible until
+ * they miss a paid slot, so the dashboard checks it explicitly.
+ */
+export async function hasPushPermission(): Promise<boolean> {
+  const { status } = await Notifications.getPermissionsAsync();
+  return status === 'granted';
+}
+
+/** Prompt for notification permission. Returns whether it ended up granted. */
+export async function requestPushPermission(): Promise<boolean> {
+  const { status } = await Notifications.requestPermissionsAsync();
+  if (status === 'granted') {
+    // Registration is a no-op if a token already exists.
+    await registerForPushNotifications().catch(() => null);
+  }
+  return status === 'granted';
+}
+
 export async function getStoredPushToken(): Promise<string | null> {
   return SecureStore.getItemAsync(TOKEN_KEY);
 }

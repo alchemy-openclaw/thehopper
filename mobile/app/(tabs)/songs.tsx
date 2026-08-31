@@ -132,12 +132,12 @@ export default function SongsScreen() {
           onPress={() => setFilterMode('all')}
         />
         <Chip
-          label={`⭐ Saved (${favorites.length})`}
+          label={`Saved (${favorites.length})`}
           active={filterMode === 'favorites'}
           onPress={() => setFilterMode('favorites')}
         />
         <Chip
-          label="✨ Suggestions"
+          label="Suggestions"
           onPress={() => setShowSuggestions(true)}
         />
       </View>
@@ -146,7 +146,7 @@ export default function SongsScreen() {
       <View style={styles.searchBar}>
         <TextInput
           style={styles.input}
-          placeholder="🔍 Search songs or artists…"
+          placeholder="Search songs or artists…"
           placeholderTextColor={Colors.textMute}
           value={search}
           onChangeText={setSearch}

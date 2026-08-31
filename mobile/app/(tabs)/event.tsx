@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -12,13 +13,17 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
+import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
 import * as LinkingExpo from 'expo-linking';
 import type { AppConfig, ChatMessage, Venue } from '../../src/types';
 import { api, API_BASE } from '../../src/api';
 import { isEventActive } from '../../src/event-window';
+import { formatTimeRange } from '../../src/format';
 import { dollars, formatUsd } from '../../src/money';
 import { getStoredPushToken } from '../../src/notifications';
+import { getSessionToken } from '../../src/session';
 import { useVenueContext } from '../../src/venue-context';
 import { usePrefsContext } from '../../src/prefs-context';
 import {
@@ -32,11 +37,13 @@ import {
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
 export default function EventScreen() {
-  const { selectedVenue } = useVenueContext();
+  const { selectedVenue, selectVenue } = useVenueContext();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [showPay, setShowPay] = useState(false);
   const [showTip, setShowTip] = useState(false);
   const [showLineup, setShowLineup] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   useEffect(() => {
     api.getConfig().then(setConfig).catch(() => setConfig(null));
@@ -91,6 +98,42 @@ export default function EventScreen() {
 
   const venue = selectedVenue;
   const eventActive = isEventActive(venue);
+  const photoUrl = venue.image_url ? api.mediaUrl(venue.image_url) : null;
+
+  const handleAddPhoto = async () => {
+    setPhotoError(null);
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      setPhotoError('Photo access is needed to add a picture.');
+      return;
+    }
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      // Downscale and compress on device: a modern phone photo is far larger
+      // than a blurred backdrop needs, and the server caps uploads at 6MB.
+      quality: 0.7,
+      allowsEditing: true,
+      aspect: [16, 9],
+    });
+    if (picked.canceled || !picked.assets?.length) return;
+
+    setUploadingPhoto(true);
+    try {
+      const token = await getSessionToken();
+      const updated = await api.uploadVenueImage(
+        venue.id,
+        picked.assets[0].uri,
+        token ?? undefined,
+      );
+      // Refresh the shared venue so the photo shows immediately here and on
+      // the Find tab without a reload.
+      selectVenue(updated);
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : 'Could not upload that photo');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -98,8 +141,23 @@ export default function EventScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      {/* Venue header (compact — matches venue list style) */}
+      {/* Venue header. A community photo sits behind it, blurred and dimmed so
+          the name, nights and times stay legible over whatever was uploaded. */}
       <Card style={styles.headerCard}>
+        {photoUrl && (
+          <View style={styles.headerBackdrop} pointerEvents="none">
+            <Image
+              source={{ uri: photoUrl }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+            />
+            <BlurView intensity={38} tint="dark" style={StyleSheet.absoluteFill} />
+            {/* The blur alone is not enough for a bright photo; this guarantees
+                contrast regardless of what was uploaded. */}
+            <View style={styles.headerScrim} />
+          </View>
+        )}
+
         <View style={styles.venueHeaderRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.venueName}>{venue.name}</Text>
@@ -110,10 +168,21 @@ export default function EventScreen() {
           {venue.karaoke_nights.map((n) => (
             <MetaPill key={n} label={n} variant="nights" />
           ))}
-          <MetaPill label={`🕘 ${venue.start_time}–${venue.end_time}`} />
+          <MetaPill label={formatTimeRange(venue.start_time, venue.end_time)} />
           {venue.kj_name && <MetaPill label={`KJ: ${venue.kj_name}`} />}
         </View>
         {venue.vibe ? <Text style={styles.venueVibe}>{venue.vibe}</Text> : null}
+
+        {/* Offered only when the venue has no photo yet. */}
+        {!photoUrl && (
+          <Pressable onPress={handleAddPhoto} disabled={uploadingPhoto} hitSlop={8}>
+            <Text style={styles.addPhotoLink}>
+              {uploadingPhoto ? 'Uploading…' : '+ Add a photo of this place'}
+            </Text>
+          </Pressable>
+        )}
+        {photoError && <Text style={styles.photoError}>{photoError}</Text>}
+
         {!config?.stripe_configured && (
           <Text style={styles.testModeNote}>
             Test mode — no real charges will be made.
@@ -175,9 +244,17 @@ export default function EventScreen() {
           </Text>
           <Pressable
             onPress={() => setShowTip(true)}
-            style={({ pressed }) => [styles.subtleBtn, styles.subtleBtnTip, pressed && styles.subtleBtnPressed]}
+            style={({ pressed }) => [
+              styles.subtleBtn,
+              // subtleBtn carries flex:1 for the bottom action row. In this
+              // centred column that makes the button stretch to fill the whole
+              // screen, so the flex is cancelled and the width constrained.
+              styles.offEventBtn,
+              styles.subtleBtnTip,
+              pressed && styles.subtleBtnPressed,
+            ]}
           >
-            <Text style={styles.subtleBtnText}>💰 Tip KJ</Text>
+            <Text style={styles.subtleBtnText}>Tip KJ</Text>
           </Pressable>
         </View>
       )}
@@ -472,7 +549,7 @@ function PaymentModal({
           <Pressable style={styles.modalClose} onPress={onClose} hitSlop={12}>
             <Text style={styles.modalCloseText}>×</Text>
           </Pressable>
-          <Text style={styles.modalTitle}>⏭️ Move Up in the Queue</Text>
+          <Text style={styles.modalTitle}>Move Up in the Queue</Text>
           <Text style={styles.modalSub}>
             {venue.name} · KJ: {venue.kj_name || 'TBA'}
           </Text>
@@ -622,7 +699,7 @@ function TipModal({
           <Pressable style={styles.modalClose} onPress={onClose} hitSlop={12}>
             <Text style={styles.modalCloseText}>×</Text>
           </Pressable>
-          <Text style={styles.modalTitle}>💰 Tip the KJ</Text>
+          <Text style={styles.modalTitle}>Tip the KJ</Text>
           <Text style={styles.modalSub}>
             {venue.kj_name ? `Show some love to ${venue.kj_name}` : `Show some love to the KJ at ${venue.name}`}
           </Text>
@@ -784,7 +861,7 @@ export function MessageKJModal({
           <Pressable style={styles.modalClose} onPress={onClose} hitSlop={12}>
             <Text style={styles.modalCloseText}>×</Text>
           </Pressable>
-          <Text style={styles.modalTitle}>✉️ Message {venue.kj_name || 'the KJ'}</Text>
+          <Text style={styles.modalTitle}>Message {venue.kj_name || 'the KJ'}</Text>
           <Text style={styles.modalSub}>{venue.name}</Text>
 
           {sent ? (
@@ -927,7 +1004,7 @@ function GetInLineModal({
           <Pressable style={styles.modalClose} onPress={onClose} hitSlop={12}>
             <Text style={styles.modalCloseText}>×</Text>
           </Pressable>
-          <Text style={styles.modalTitle}>🎤 Get In Line</Text>
+          <Text style={styles.modalTitle}>Get In Line</Text>
           <Text style={styles.modalSub}>{venue.name} · KJ: {venue.kj_name || 'TBA'}</Text>
 
           {sent ? (
@@ -1004,6 +1081,36 @@ const styles = StyleSheet.create({
   // Venue header card (compact, matches venue list)
   headerCard: {
     marginBottom: 0,
+    // Clips the backdrop to the card's rounded corners.
+    overflow: 'hidden',
+  },
+  headerBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    // Sits behind the header content; siblings after it paint on top.
+    zIndex: -1,
+  },
+  headerScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(13, 2, 33, 0.62)',
+  },
+  addPhotoLink: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.cyan,
+  },
+  photoError: {
+    marginTop: 6,
+    fontSize: 12,
+    color: Colors.textMute,
   },
   venueHeaderRow: {
     flexDirection: 'row',
@@ -1320,6 +1427,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     marginBottom: Spacing.sm,
+  },
+  offEventBtn: {
+    flex: 0,
+    alignSelf: 'center',
+    minWidth: 180,
+    maxWidth: 260,
+    paddingVertical: 12,
   },
 
   // Message KJ modal

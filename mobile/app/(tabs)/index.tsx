@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import type { AppConfig, Venue } from '../../src/types';
 import { api } from '../../src/api';
 import { getGeolocation } from '../../src/prefs';
+import { daysUntilNextEvent, eventDayLabel, hasEventSoon } from '../../src/event-window';
+import { formatTime12h, formatTimeRange } from '../../src/format';
 import { useVenueContext } from '../../src/venue-context';
 import {
   Banner,
@@ -28,7 +30,24 @@ export default function VenuesScreen() {
   const [city, setCity] = useState('');
   const [filter, setFilter] = useState<Filter>({ kind: 'all' });
   const [config, setConfig] = useState<AppConfig | null>(null);
+  // Default to what a singer can actually act on tonight. A venue whose next
+  // night is Thursday is noise when you are deciding where to go now.
+  const [soonOnly, setSoonOnly] = useState(true);
   const { selectVenue } = useVenueContext();
+
+  const visibleVenues = useMemo(
+    () => (soonOnly ? venues.filter((v) => hasEventSoon(v)) : venues),
+    [venues, soonOnly],
+  );
+  // Venues hidden only because their night is not tonight or tomorrow. Counts
+  // just those that actually run karaoke sometime — a venue with no schedule at
+  // all is not "on another night", and saying so overstates what the escape
+  // hatch would reveal.
+  const otherNightCount = useMemo(
+    () =>
+      venues.filter((v) => !hasEventSoon(v) && daysUntilNextEvent(v) != null).length,
+    [venues],
+  );
 
   const loadVenues = async (lat?: number, lng?: number, cityFilter?: string) => {
     setLoading(true);
@@ -125,28 +144,66 @@ export default function VenuesScreen() {
             />
           </View>
         )}
+
+        {/* When karaoke is on. Defaults to the actionable window; the escape
+            hatch matters because plenty of venues only run one night a week. */}
+        <View style={styles.whenRow}>
+          <Pressable
+            onPress={() => setSoonOnly(true)}
+            style={({ pressed }) => [
+              styles.whenChip,
+              soonOnly && styles.whenChipActive,
+              pressed && styles.whenChipPressed,
+            ]}
+          >
+            <Text style={[styles.whenChipText, soonOnly && styles.whenChipTextActive]}>
+              Tonight & tomorrow
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setSoonOnly(false)}
+            style={({ pressed }) => [
+              styles.whenChip,
+              !soonOnly && styles.whenChipActive,
+              pressed && styles.whenChipPressed,
+            ]}
+          >
+            <Text style={[styles.whenChipText, !soonOnly && styles.whenChipTextActive]}>
+              Any night
+            </Text>
+          </Pressable>
+        </View>
       </Card>
 
       {error && <Banner message={`⚠️ ${error}`} variant="warn" />}
 
       {loading ? (
         <Loading label="Finding karaoke…" />
-      ) : venues.length === 0 ? (
+      ) : visibleVenues.length === 0 ? (
         <View>
           <EmptyState
             icon="🗺️"
             message={
-              filter.kind === 'city'
-                ? `No venues in “${filter.city}” yet.`
-                : 'No venues found.'
+              // Distinguish "nothing here" from "nothing tonight" — otherwise
+              // the filter reads as no venues existing at all.
+              otherNightCount > 0
+                ? `No karaoke tonight or tomorrow${
+                    filter.kind === 'city' ? ` in “${filter.city}”` : ''
+                  }. ${otherNightCount} ${otherNightCount === 1 ? 'venue runs' : 'venues run'} on other nights.`
+                : filter.kind === 'city'
+                  ? `No venues in “${filter.city}” yet.`
+                  : 'No venues found.'
             }
           />
+          {otherNightCount > 0 && (
+            <Button label="Show any night" onPress={() => setSoonOnly(false)} />
+          )}
           {filter.kind !== 'all' && (
             <Button label="← Back to all venues" onPress={handleShowAll} />
           )}
         </View>
       ) : (
-        venues.map((v) => (
+        visibleVenues.map((v) => (
           <VenueCard
             key={v.id}
             venue={v}
@@ -168,6 +225,8 @@ function VenueCard({
   onSelect: () => void;
   stripeConfigured: boolean;
 }) {
+  const nextNight = eventDayLabel(venue);
+
   return (
     <Card>
       <View style={styles.venueHeader}>
@@ -182,11 +241,26 @@ function VenueCard({
         )}
       </View>
 
+      {/* Says when the next night is, so the list reads the same whether or not
+          the tonight/tomorrow filter is on. */}
+      {nextNight && (
+        <Text
+          style={[
+            styles.nextNight,
+            nextNight === 'Tonight' && styles.nextNightSoon,
+          ]}
+        >
+          {nextNight === 'Tonight' || nextNight === 'Tomorrow'
+            ? `${nextNight} · ${formatTime12h(venue.start_time)}`
+            : `Next: ${nextNight} · ${formatTime12h(venue.start_time)}`}
+        </Text>
+      )}
+
       <View style={styles.venueMeta}>
         {venue.karaoke_nights.map((n) => (
           <MetaPill key={n} label={n} variant="nights" />
         ))}
-        <MetaPill label={`🕘 ${venue.start_time}–${venue.end_time}`} />
+        <MetaPill label={formatTimeRange(venue.start_time, venue.end_time)} />
         {venue.kj_name && <MetaPill label={`KJ: ${venue.kj_name}`} />}
       </View>
 
@@ -247,6 +321,36 @@ const styles = StyleSheet.create({
     color: Colors.textDim,
     lineHeight: 18,
   },
+  whenRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  whenChip: {
+    flex: 1,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.bg2,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.md,
+  },
+  whenChipActive: {
+    backgroundColor: Colors.pink,
+    borderColor: 'transparent',
+  },
+  whenChipPressed: { opacity: 0.85 },
+  whenChipText: { color: Colors.textDim, fontSize: 13, fontWeight: '600' },
+  whenChipTextActive: { color: '#fff', fontWeight: '700' },
+  nextNight: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textDim,
+  },
+  nextNightSoon: { color: Colors.pink },
   clearBtn: {
     paddingHorizontal: 14,
   },
