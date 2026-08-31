@@ -51,6 +51,7 @@ from pydantic import BaseModel
 
 from legal_pages import privacy_html, support_html
 from seed_data import SONGS, VENUES
+from storage import build_storage
 from stripe_connect import ConnectManager, ConnectAccount
 from kj_site_light import _kj_site_html_light
 
@@ -1688,8 +1689,11 @@ def list_songs(
 # API: venue photos
 # ---------------------------------------------------------------------------
 
-# Where uploaded venue photos live, served back at /media/venues/<file>.
+# Where uploaded venue photos live. Cloudflare R2 in production (no egress
+# fees, served from the edge, survives a redeploy); the local disk otherwise.
+# See storage.py for the environment variables that switch this over.
 MEDIA_DIR = BASE_DIR / "media" / "venues"
+media_storage = build_storage(MEDIA_DIR)
 
 MAX_IMAGE_BYTES = 6 * 1024 * 1024  # ~6MB; the app downscales before sending
 
@@ -1742,24 +1746,19 @@ async def upload_venue_image(
     if not ext:
         raise HTTPException(status_code=400, detail="Only JPEG and PNG images are accepted")
 
-    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     # Random name: the original filename is attacker-controlled and could
     # traverse or collide.
     filename = f"venue-{venue_id}-{secrets.token_hex(8)}{ext}"
-    (MEDIA_DIR / filename).write_bytes(data)
-    url = f"/media/venues/{filename}"
+    content_type = "image/png" if ext == ".png" else "image/jpeg"
+    url = media_storage.save(data, filename, content_type)
 
     with db() as conn:
         conn.execute("UPDATE venues SET image_url=? WHERE id=?", (url, venue_id))
         row = conn.execute("SELECT * FROM venues WHERE id=?", (venue_id,)).fetchone()
 
-    # Best-effort cleanup of the file being replaced.
-    if existing and existing.startswith("/media/venues/"):
-        old = MEDIA_DIR / pathlib.Path(existing).name
-        try:
-            old.unlink(missing_ok=True)
-        except OSError:
-            pass
+    # Best-effort cleanup of whatever was replaced.
+    if existing:
+        media_storage.delete(existing)
 
     return venue_row_to_dict(row)
 
@@ -1777,11 +1776,8 @@ def delete_venue_image(venue_id: int, x_session_token: str | None = Header(defau
         conn.execute("UPDATE venues SET image_url=NULL WHERE id=?", (venue_id,))
         row = conn.execute("SELECT * FROM venues WHERE id=?", (venue_id,)).fetchone()
 
-    if existing and existing.startswith("/media/venues/"):
-        try:
-            (MEDIA_DIR / pathlib.Path(existing).name).unlink(missing_ok=True)
-        except OSError:
-            pass
+    if existing:
+        media_storage.delete(existing)
 
     return venue_row_to_dict(row)
 

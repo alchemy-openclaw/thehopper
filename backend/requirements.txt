@@ -3,3 +3,4 @@ uvicorn[standard]==0.34.0
 stripe==11.4.1
 pydantic==2.10.4
 python-multipart==0.0.20
+boto3==1.35.99
