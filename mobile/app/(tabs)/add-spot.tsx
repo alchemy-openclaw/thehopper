@@ -15,8 +15,9 @@ import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { getSessionToken, setSessionToken } from '../../src/session';
 import { api, API_BASE } from '../../src/api';
+import { getGeolocation } from '../../src/location';
 import { useKJContext } from '../../src/kj-context';
-import type { KJ } from '../../src/types';
+import type { KJ, Venue } from '../../src/types';
 import {
   Banner,
   Button,
@@ -42,10 +43,17 @@ function normalizePhone(phone: string): string {
 }
 
 export default function AddSpotScreen() {
+  // Mode picker: how the KJ tells us where the show is. null = not chosen yet.
+  // 'location' — GPS lookup ("At Current Location")
+  // 'manual'   — type the venue in ("I'll Enter A Venue")
+  type VenueMode = 'location' | 'manual' | null;
+  const [venueMode, setVenueMode] = useState<VenueMode>(null);
+
   // Venue fields
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
+  const [stateCode, setStateCode] = useState('');
   const [nights, setNights] = useState<string[]>([]);
   const [startTime, setStartTime] = useState('20:00');
   const [endTime, setEndTime] = useState('00:00');
@@ -53,6 +61,16 @@ export default function AddSpotScreen() {
   const [website, setWebsite] = useState('');
   const [instagram, setInstagram] = useState('');
   const [vibe, setVibe] = useState('');
+
+  // "At Current Location" flow state
+  const [locating, setLocating] = useState(false);
+  const [matchedVenue, setMatchedVenue] = useState<Venue | null>(null);
+  const [nearbyVenues, setNearbyVenues] = useState<Venue[]>([]);
+  const [addressHint, setAddressHint] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  // When true the venue was chosen/confirmed, so the venue fields collapse
+  // into a read-only summary and only the show fields remain editable.
+  const [venueConfirmed, setVenueConfirmed] = useState(false);
 
   // KJ fields
   const [isKJ, setIsKJ] = useState(false);
@@ -236,8 +254,57 @@ export default function AddSpotScreen() {
     await handleSendCode();
   };
 
+  // --- "At Current Location" flow -----------------------------------------
+
+  const handleUseCurrentLocation = async () => {
+    setLocationError(null);
+    setLocating(true);
+    try {
+      const { lat, lng } = await getGeolocation();
+      const res = await api.nearbyLookup(lat, lng);
+      setNearbyVenues(res.nearby_venues);
+      setAddressHint(res.address_hint);
+      if (res.matched_venues.length > 0) {
+        // GPS says the KJ is standing in one of these — pick it for them.
+        setMatchedVenue(res.matched_venues[0]);
+        setVenueConfirmed(true);
+      } else if (res.nearby_venues.length > 0) {
+        // Close but not exact — show the picker, let them choose.
+      } else {
+        // Nothing in the directory here: fall into the manual form, prefilled
+        // from reverse geocoding when we have it.
+        if (res.address_hint) {
+          setAddress(res.address_hint);
+        }
+        setVenueMode('manual');
+      }
+    } catch (e) {
+      setLocationError(
+        e instanceof Error ? e.message : 'Could not get your location. Enter the venue instead.'
+      );
+      setVenueMode('manual');
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const confirmPickedVenue = (v: Venue) => {
+    setMatchedVenue(v);
+    setVenueConfirmed(true);
+  };
+
+  const changeVenue = () => {
+    setVenueConfirmed(false);
+    setMatchedVenue(null);
+    setVenueMode(null);
+  };
+
   const handleSubmit = async () => {
-    if (!name.trim() || !address.trim() || !city.trim()) {
+    // Venue identity: either a confirmed pick from the location flow, or the
+    // manual fields. GPS-prefilled name is not identity — the submitter may
+    // still be typing the venue name over it.
+    const usingPickedVenue = venueConfirmed && matchedVenue;
+    if (!usingPickedVenue && (!name.trim() || !address.trim() || !city.trim())) {
       setError('Name, address, and city are required');
       return;
     }
@@ -249,9 +316,13 @@ export default function AddSpotScreen() {
     setSubmitting(true);
     try {
       const res = await api.submitVenue({
-        name: name.trim(),
-        address: address.trim(),
-        city: city.trim(),
+        // For a picked venue the name/address/city are already on file — send
+        // placeholders to satisfy the schema; the server ignores them on the
+        // existing_venue_id path.
+        name: usingPickedVenue ? matchedVenue!.name : name.trim(),
+        address: usingPickedVenue ? matchedVenue!.address : address.trim(),
+        city: usingPickedVenue ? matchedVenue!.city : city.trim(),
+        state: usingPickedVenue ? (matchedVenue!.state ?? undefined) : (stateCode.trim().toUpperCase() || undefined),
         karaoke_nights: nights,
         start_time: startTime,
         end_time: endTime,
@@ -267,6 +338,7 @@ export default function AddSpotScreen() {
         submitter_phone: isKJ
           ? (existingKJ ? existingKJ.phone : submitterPhone.trim())
           : undefined,
+        existing_venue_id: usingPickedVenue ? matchedVenue!.id : undefined,
       });
       setSuccess(res.message);
 
@@ -353,43 +425,152 @@ export default function AddSpotScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.pageTitle}>Add a Karaoke Spot</Text>
+        <Text style={styles.pageTitle}>Add a Show</Text>
         <Text style={styles.pageSub}>
-          Know a bar that does karaoke? Add it to TheHopper so singers can find it.
+          Know a karaoke night? Add it so singers can find it.
         </Text>
 
         {error && <Banner message={`⚠️ ${error}`} variant="warn" />}
 
-        {/* Venue info */}
-        <Text style={styles.sectionLabel}>Venue Info</Text>
+        {/* Venue identity — how do we know where the show is? */}
+        {!venueConfirmed && (
+          <>
+            <Text style={styles.sectionLabel}>Where is the show?</Text>
+            {venueMode === null && (
+              <Card>
+                <Button
+                  label={locating ? 'Finding your location...' : '📍 At Current Location'}
+                  onPress={handleUseCurrentLocation}
+                  disabled={locating}
+                  variant="primary"
+                />
+                {locating && <Loading label="Getting GPS fix..." />}
+                <View style={{ height: Spacing.sm }} />
+                <Button
+                  label="I'll Enter A Venue"
+                  onPress={() => setVenueMode('manual')}
+                  variant="secondary"
+                />
+                {locationError && (
+                  <Text style={styles.modeHint}>{locationError}</Text>
+                )}
+              </Card>
+            )}
+
+            {venueMode === 'location' && (
+              <Card>
+                <Text style={styles.fieldLabel}>Which venue are you at?</Text>
+                {nearbyVenues.map((v) => (
+                  <Pressable
+                    key={v.id}
+                    onPress={() => confirmPickedVenue(v)}
+                    style={styles.pickerRow}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pickerName}>{v.name}</Text>
+                      <Text style={styles.pickerSub}>
+                        {v.city}
+                        {v.distance_miles != null ? ` · ${v.distance_miles} mi` : ''}
+                      </Text>
+                    </View>
+                    <Text style={styles.pickerChevron}>›</Text>
+                  </Pressable>
+                ))}
+                <Button
+                  label="Not listed — enter it instead"
+                  onPress={() => setVenueMode('manual')}
+                  variant="ghost"
+                />
+              </Card>
+            )}
+          </>
+        )}
+
+        {/* Confirmed venue — read-only summary with a change link */}
+        {venueConfirmed && matchedVenue && (
+          <Card>
+            <Text style={styles.sectionLabel}>Venue</Text>
+            <Text style={styles.pickerName}>{matchedVenue.name}</Text>
+            <Text style={styles.pickerSub}>
+              {matchedVenue.address}, {matchedVenue.city}
+            </Text>
+            <Button label="Change venue" onPress={changeVenue} variant="ghost" />
+          </Card>
+        )}
+
+        {/* Manual venue entry — only when mode is manual and nothing confirmed */}
+        {!venueConfirmed && venueMode === 'manual' && (
+          <>
+            <Text style={styles.sectionLabel}>Venue Info</Text>
+            <Card>
+              <Text style={styles.fieldLabel}>Venue name *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Coconuts on the Beach"
+                placeholderTextColor={Colors.textMute}
+                value={name}
+                onChangeText={setName}
+              />
+
+              <Text style={styles.fieldLabel}>Address *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="123 Main St"
+                placeholderTextColor={Colors.textMute}
+                value={address}
+                onChangeText={setAddress}
+              />
+
+              <Text style={styles.fieldLabel}>City *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Cocoa Beach"
+                placeholderTextColor={Colors.textMute}
+                value={city}
+                onChangeText={setCity}
+              />
+
+              <Text style={styles.fieldLabel}>State (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="FL"
+                placeholderTextColor={Colors.textMute}
+                value={stateCode}
+                onChangeText={setStateCode}
+                autoCapitalize="characters"
+                maxLength={10}
+              />
+
+              <Text style={styles.fieldLabel}>Karaoke nights</Text>
+              <View style={styles.nightsRow}>
+                {DAYS.map((day) => (
+                  <Pressable
+                    key={day}
+                    onPress={() => toggleNight(day)}
+                    style={({ pressed }) => [
+                      styles.dayChip,
+                      nights.includes(day) && styles.dayChipActive,
+                      pressed && styles.dayChipPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.dayChipText,
+                        nights.includes(day) && styles.dayChipTextActive,
+                      ]}
+                    >
+                      {day.slice(0, 3)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Card>
+          </>
+        )}
+
+        {/* Show details — shared by both flows */}
+        <Text style={styles.sectionLabel}>Show Details</Text>
         <Card>
-          <Text style={styles.fieldLabel}>Venue name *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Coconuts on the Beach"
-            placeholderTextColor={Colors.textMute}
-            value={name}
-            onChangeText={setName}
-          />
-
-          <Text style={styles.fieldLabel}>Address *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="123 Main St, Cocoa Beach"
-            placeholderTextColor={Colors.textMute}
-            value={address}
-            onChangeText={setAddress}
-          />
-
-          <Text style={styles.fieldLabel}>City *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Cocoa Beach"
-            placeholderTextColor={Colors.textMute}
-            value={city}
-            onChangeText={setCity}
-          />
-
           <Text style={styles.fieldLabel}>Karaoke nights</Text>
           <View style={styles.nightsRow}>
             {DAYS.map((day) => (
@@ -437,47 +618,51 @@ export default function AddSpotScreen() {
             </View>
           </View>
 
-          <Text style={styles.fieldLabel}>Venue Contact Phone (optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="(321) 555-0100"
-            placeholderTextColor={Colors.textMute}
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-          />
+          {!venueConfirmed && (
+            <>
+              <Text style={styles.fieldLabel}>Venue Contact Phone (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="(321) 555-0100"
+                placeholderTextColor={Colors.textMute}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+              />
 
-          <Text style={styles.fieldLabel}>Website (optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="https://..."
-            placeholderTextColor={Colors.textMute}
-            value={website}
-            onChangeText={setWebsite}
-            keyboardType="url"
-            autoCapitalize="none"
-          />
+              <Text style={styles.fieldLabel}>Website (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="https://..."
+                placeholderTextColor={Colors.textMute}
+                value={website}
+                onChangeText={setWebsite}
+                keyboardType="url"
+                autoCapitalize="none"
+              />
 
-          <Text style={styles.fieldLabel}>Instagram (optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="@venue_handle"
-            placeholderTextColor={Colors.textMute}
-            value={instagram}
-            onChangeText={setInstagram}
-            autoCapitalize="none"
-          />
+              <Text style={styles.fieldLabel}>Instagram (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="@venue_handle"
+                placeholderTextColor={Colors.textMute}
+                value={instagram}
+                onChangeText={setInstagram}
+                autoCapitalize="none"
+              />
 
-          <Text style={styles.fieldLabel}>Vibe (optional)</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Beach bar, divey, packed on weekends..."
-            placeholderTextColor={Colors.textMute}
-            value={vibe}
-            onChangeText={setVibe}
-            multiline
-            numberOfLines={2}
-          />
+              <Text style={styles.fieldLabel}>Vibe (optional)</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Beach bar, divey, packed on weekends..."
+                placeholderTextColor={Colors.textMute}
+                value={vibe}
+                onChangeText={setVibe}
+                multiline
+                numberOfLines={2}
+              />
+            </>
+          )}
         </Card>
 
         {/* KJ toggle */}
@@ -815,4 +1000,20 @@ const styles = StyleSheet.create({
   successIcon: { fontSize: 48, textAlign: 'center', marginBottom: Spacing.sm },
   successTitle: { ...Typography.title, color: Colors.text, textAlign: 'center', marginBottom: Spacing.sm },
   successBody: { color: Colors.textDim, fontSize: 15, textAlign: 'center', marginBottom: Spacing.lg, lineHeight: 22 },
+  modeHint: {
+    color: Colors.textDim,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: Spacing.sm,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  pickerName: { fontSize: 16, fontWeight: '700', color: Colors.text },
+  pickerSub: { fontSize: 13, color: Colors.textDim, marginTop: 2 },
+  pickerChevron: { fontSize: 22, color: Colors.textMute, marginLeft: Spacing.sm },
 });

@@ -126,7 +126,24 @@ def _kj_site_html_light(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     centered_in = f"Centered in {html.escape(kj_city)}, FL" if kj_city else ""
 
     venues_count = len(venues)
-    services_html = f"""
+
+    # Private-hire banner. Self-reported via the app; it is the whole reason
+    # the hire pages exist, so it gets the top of the services section and a
+    # tel: CTA rather than being buried in the bio.
+    kj_keys = set(kj.keys())
+    available_for_hire = bool(kj["available_for_hire"]) if "available_for_hire" in kj_keys else False
+    hire_note = (kj["hire_note"] if "hire_note" in kj_keys else None) or ""
+    hire_html = ""
+    if available_for_hire:
+        note_esc = html.escape(hire_note)
+        hire_html = f"""
+    <div class="service hire">
+      <h3>Available for Private Hire</h3>
+      <p>{note_esc or 'Book this host for weddings, parties, and corporate events. Full karaoke setup, thousands of songs, and a host who runs the room.'}</p>
+      {f'<p><a class="hire-cta" href="tel:{html.escape(kj_phone)}">Call {html.escape(kj_phone_fmt)}</a></p>' if kj_phone else ''}
+    </div>"""
+
+    services_html = f"""{hire_html}
     <div class="service">
       <h3>Live Karaoke Hosting</h3>
       <p>Professional karaoke hosting at {venues_count} venue{'s' if venues_count != 1 else ''}. Full song catalog, sound equipment setup, and crowd engagement.</p>
@@ -350,13 +367,28 @@ def _kj_site_html_light(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     .services-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 0.7rem;
+      gap: 1rem;
     }}
     .service {{
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 1.1rem 1.3rem;
+    }}
+    .service.hire {{
+      border-color: var(--blue);
+      border-width: 2px;
+    }}
+    .hire-cta {{
+      display: inline-block;
+      margin-top: 0.4rem;
+      padding: 0.45rem 1rem;
+      background: var(--blue);
+      color: #fff;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      text-decoration: none;
     }}
     .service h3 {{
       font-size: 1rem;

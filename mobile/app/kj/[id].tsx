@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   Alert,
   Linking,
@@ -49,6 +50,10 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
   const [savingSettings, setSavingSettings] = useState(false);
   const [notifyPush, setNotifyPush] = useState(true);
   const [notifySms, setNotifySms] = useState(true);
+  // Private-hire availability. The toggle saves instantly like the other
+  // preferences; the note saves on blur (it is free text, not a switch).
+  const [availableForHire, setAvailableForHire] = useState(false);
+  const [hireNote, setHireNote] = useState('');
   // Tracks the OS-level permission, which can contradict the KJ's own setting.
   const [pushBlocked, setPushBlocked] = useState(false);
 
@@ -79,6 +84,8 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
         setSongRequired(kjData.song_request_required ?? false);
         setNotifyPush(kjData.notify_push ?? true);
         setNotifySms(kjData.notify_sms ?? true);
+        setAvailableForHire(kjData.available_for_hire ?? false);
+        setHireNote(kjData.hire_note ?? '');
         setLineupVenue(pickLineupVenue(venuesData));
         checkPushPermission();
       })
@@ -170,6 +177,33 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
     } catch (e) {
       setSongRequired(!newVal); // revert on failure
       Alert.alert('Error', e instanceof Error ? e.message : 'Could not update settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const toggleAvailableForHire = async () => {
+    const newVal = !availableForHire;
+    setAvailableForHire(newVal);
+    setSavingSettings(true);
+    try {
+      const updated = await api.updateKJSettings(kjId, { available_for_hire: newVal });
+      setKJ(updated);
+    } catch (e) {
+      setAvailableForHire(!newVal); // revert on failure
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not update settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const saveHireNote = async () => {
+    setSavingSettings(true);
+    try {
+      const updated = await api.updateKJSettings(kjId, { hire_note: hireNote });
+      setKJ(updated);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not save the note');
     } finally {
       setSavingSettings(false);
     }
@@ -358,6 +392,45 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
             <View style={[styles.toggleKnob, songRequired && styles.toggleKnobOn]} />
           </View>
         </Pressable>
+
+        {/* Private-hire availability — this is what puts the KJ on the hire
+            pages that weddings and parties search for. */}
+        <Pressable
+          onPress={toggleAvailableForHire}
+          disabled={savingSettings}
+          style={styles.toggleRow}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleLabel}>Available for private hire</Text>
+            <Text style={styles.toggleDesc}>
+              {availableForHire
+                ? 'You show up on your hire page — weddings, parties, corporate events can find and book you.'
+                : 'Turn on to appear on your hire page for weddings, parties, and events.'}
+            </Text>
+          </View>
+          <View style={[styles.toggleSwitch, availableForHire && styles.toggleSwitchOn]}>
+            <View style={[styles.toggleKnob, availableForHire && styles.toggleKnobOn]} />
+          </View>
+        </Pressable>
+
+        {availableForHire && (
+          <View>
+            <Text style={styles.toggleDesc}>
+              Anything you want people to know — service area, event types, how
+              to book:
+            </Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Serving all of Brevard County. Weddings, birthdays, corporate..."
+              placeholderTextColor={Colors.textMute}
+              value={hireNote}
+              onChangeText={setHireNote}
+              onEndEditing={saveHireNote}
+              multiline
+              numberOfLines={3}
+            />
+          </View>
+        )}
 
         <Text style={styles.subsectionLabel}>How we reach you</Text>
 
@@ -570,5 +643,20 @@ const styles = StyleSheet.create({
   toggleKnobOn: {
     backgroundColor: '#fff',
     alignSelf: 'flex-end',
+  },
+  input: {
+    minHeight: 44,
+    backgroundColor: Colors.bg2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    color: Colors.text,
+    fontSize: 16,
+    marginTop: 8,
+  },
+  textArea: {
+    minHeight: 80,
+    paddingVertical: 10,
   },
 });

@@ -390,6 +390,28 @@ def init_db() -> None:
         if "kj_id" not in vcols:
             conn.execute("ALTER TABLE venues ADD COLUMN kj_id INTEGER REFERENCES kjs(id)")
 
+        # Migration: national directory seed data. Source/confidence track
+        # where a row came from (scrape vs submission vs KJ claim) so stale
+        # directory rows can be told apart from curated ones without a
+        # second database. state is the two-letter USPS code for SEO hubs.
+        if "source" not in vcols:
+            conn.execute("ALTER TABLE venues ADD COLUMN source TEXT")
+        if "confidence" not in vcols:
+            conn.execute("ALTER TABLE venues ADD COLUMN confidence TEXT")
+        if "state" not in vcols:
+            conn.execute("ALTER TABLE venues ADD COLUMN state TEXT")
+
+        # Migration: private-hire availability on the KJ profile. The KJ hire
+        # pages are the commercial product, so availability has to be a
+        # first-class, self-reported field rather than prose buried in bio.
+        kcols = {row["name"] for row in conn.execute("PRAGMA table_info(kjs)")}
+        if "available_for_hire" not in kcols:
+            conn.execute(
+                "ALTER TABLE kjs ADD COLUMN available_for_hire INTEGER NOT NULL DEFAULT 0"
+            )
+        if "hire_note" not in kcols:
+            conn.execute("ALTER TABLE kjs ADD COLUMN hire_note TEXT")
+
         # Seed venues if empty
         cur = conn.execute("SELECT COUNT(*) as c FROM venues")
         if cur.fetchone()["c"] == 0:
@@ -501,6 +523,61 @@ def init_db() -> None:
 # Geolocation helpers
 # ---------------------------------------------------------------------------
 
+# USPS state codes, used for the state column (SEO hub pages) and for
+# parsing state out of free-form address tails.
+US_STATES = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI",
+    "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN",
+    "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH",
+    "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
+    "WV", "WI", "WY",
+}
+
+# Full state names → USPS codes, for address tails like "Punta Gorda, Florida".
+US_STATE_NAMES = {
+    "ALABAMA": "AL", "ALASKA": "AK", "ARIZONA": "AZ", "ARKANSAS": "AR",
+    "CALIFORNIA": "CA", "COLORADO": "CO", "CONNECTICUT": "CT", "DELAWARE": "DE",
+    "DISTRICT OF COLUMBIA": "DC", "FLORIDA": "FL", "GEORGIA": "GA",
+    "HAWAII": "HI", "IDAHO": "ID", "ILLINOIS": "IL", "INDIANA": "IN",
+    "IOWA": "IA", "KANSAS": "KS", "KENTUCKY": "KY", "LOUISIANA": "LA",
+    "MAINE": "ME", "MARYLAND": "MD", "MASSACHUSETTS": "MA", "MICHIGAN": "MI",
+    "MINNESOTA": "MN", "MISSISSIPPI": "MS", "MISSOURI": "MO", "MONTANA": "MT",
+    "NEBRASKA": "NE", "NEVADA": "NV", "NEW HAMPSHIRE": "NH", "NEW JERSEY": "NJ",
+    "NEW MEXICO": "NM", "NEW YORK": "NY", "NORTH CAROLINA": "NC",
+    "NORTH DAKOTA": "ND", "OHIO": "OH", "OKLAHOMA": "OK", "OREGON": "OR",
+    "PENNSYLVANIA": "PA", "RHODE ISLAND": "RI", "SOUTH CAROLINA": "SC",
+    "SOUTH DAKOTA": "SD", "TENNESSEE": "TN", "TEXAS": "TX", "UTAH": "UT",
+    "VERMONT": "VT", "VIRGINIA": "VA", "WASHINGTON": "WA",
+    "WEST VIRGINIA": "WV", "WISCONSIN": "WI", "WYOMING": "WY",
+}
+
+
+def _state_from_address(address: str | None) -> str | None:
+    """Pull a two-letter state code off the tail of a free-form address.
+
+    Matches '... Melbourne, FL 32901', '...Punta Gorda, Florida', and bare
+    '...El Paso TX'. Returns None when nothing plausible is present.
+    """
+    if not address:
+        return None
+    tail = address.rstrip().rstrip(",").split(",")[-1].strip().upper()
+    words = tail.split()
+    if not words:
+        return None
+    # "FL" / "FL 32901"
+    if words[0] in US_STATES:
+        return words[0]
+    # "Florida" / "Florida 32901"
+    if words[0] in US_STATE_NAMES:
+        return US_STATE_NAMES[words[0]]
+    # "32901 FL" / "32901 Florida"
+    if len(words) >= 2:
+        if words[-1] in US_STATES:
+            return words[-1]
+        if words[-1] in US_STATE_NAMES:
+            return US_STATE_NAMES[words[-1]]
+    return None
+
 
 def haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Great-circle distance in miles between two lat/lng points."""
@@ -519,13 +596,17 @@ def _normalize_venue_name(name: str) -> str:
     """Normalize a venue name for fuzzy matching.
 
     Lowercase, strip common suffixes (the, bar, grill, etc.),
-    collapse whitespace and punctuation.
+    collapse whitespace and punctuation. 'And'/'&' are treated as
+    equivalent so "Fishlips Bar and Grill" matches "Fishlips Bar & Grill".
     """
     import re
     n = name.lower().strip()
+    # Unify ampersands with 'and' before suffix stripping, so both orders of
+    # "bar and grill" / "bar & grill" collapse the same way.
+    n = n.replace("&", " and ")
     # Remove common business suffixes
     for suffix in [" the ", " bar ", " grill ", " pub ", " lounge ",
-                   " restaurant ", " & grill", " bar and grill",
+                   " restaurant ", " bar and grill", " and grill",
                    " sports bar", " tavern", " taproom"]:
         n = n.replace(suffix, " ")
     # Remove punctuation
@@ -560,9 +641,17 @@ def _check_duplicate_venue(
     venues = conn.execute("SELECT * FROM venues").fetchall()
     for v in venues:
         existing_norm = _normalize_venue_name(v["name"])
-        # Exact normalized name match
-        if existing_norm == norm_name:
-            # Same city or same address
+        # Same city or same address. Name containment (either direction) is
+        # accepted here, not just equality: "Fishlips Bar and Grill" vs
+        # "Fishlips Bar & Grill" normalize differently but are obviously the
+        # same place when they share a city. Without the city anchor this
+        # would wrongly merge same-named bars in different states.
+        name_alike = (
+            existing_norm == norm_name
+            or norm_name in existing_norm
+            or existing_norm in norm_name
+        )
+        if name_alike:
             if (city and v["city"].lower() == city.lower()) or \
                (address and address.lower().strip() in v["address"].lower()):
                 return venue_row_to_dict(v)
@@ -572,7 +661,7 @@ def _check_duplicate_venue(
             dist = haversine_miles(lat, lng, v["lat"], v["lng"])
             if dist < 0.1:  # within ~0.1 miles (~528ft)
                 # Name similarity — check if one name contains the other
-                if norm_name in existing_norm or existing_norm in norm_name:
+                if name_alike:
                     return venue_row_to_dict(v)
 
     # Also check pending submissions to flag duplicates early
@@ -593,6 +682,53 @@ def _check_duplicate_venue(
                 }
 
     return None
+
+
+def _merge_show_into_venue(
+    conn: sqlite3.Connection, venue_id: int, req: "VenueSubmissionRequest"
+) -> None:
+    """Merge a submitted show (nights/times/KJ info) into an existing venue row.
+
+    Used both when the client explicitly picked a venue (existing_venue_id)
+    and when the fuzzy duplicate check resolves to an existing venue. Nights
+    are unioned; blank times never clobber good data; a human confirmation
+    bumps the row to source=user_submission / confidence=claimed.
+    """
+    existing = conn.execute(
+        "SELECT karaoke_nights, start_time, end_time FROM venues WHERE id=?",
+        (venue_id,),
+    ).fetchone()
+    if existing is None:
+        return
+    merged_nights = sorted(
+        {
+            n.strip()
+            for n in (existing["karaoke_nights"] or "").split(",")
+            if n.strip()
+        }
+        | set(req.karaoke_nights)
+    )
+    conn.execute(
+        """UPDATE venues
+           SET karaoke_nights=?,
+               start_time=COALESCE(NULLIF(?, ''), start_time),
+               end_time=COALESCE(NULLIF(?, ''), end_time),
+               kj_name=COALESCE(?, kj_name),
+               phone=COALESCE(?, phone),
+               website=COALESCE(?, website),
+               source='user_submission',
+               confidence='claimed'
+           WHERE id=?""",
+        (
+            ",".join(merged_nights),
+            req.start_time,
+            req.end_time,
+            req.kj_name,
+            req.phone,
+            req.website,
+            venue_id,
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -926,6 +1062,12 @@ class VenueOut(BaseModel):
     distance_miles: float | None = None
     stripe_account_id: str | None = None
     stripe_onboarding_status: str = "none"
+    # Directory provenance. source: where the row came from (seed,
+    # user_submission, kj_claim, scrape:<site>). confidence: how much we trust
+    # the schedule data (claimed > scraped > unverified).
+    state: str | None = None
+    source: str | None = None
+    confidence: str | None = None
 
 
 class SongOut(BaseModel):
@@ -1007,7 +1149,7 @@ class ChatMessageResponse(BaseModel):
 # --- New models for venue submission, KJ onboarding, phone verification, devices ---
 
 class VenueSubmissionRequest(BaseModel):
-    """User-submitted new karaoke spot."""
+    """User-submitted new karaoke spot (or a show at an existing spot)."""
     name: str
     address: str
     city: str
@@ -1021,6 +1163,13 @@ class VenueSubmissionRequest(BaseModel):
     vibe: str | None = None
     is_kj: bool = False
     submitter_phone: str | None = None  # for verification + notifications
+    # Two-letter state code (or full state name). Required for geocoding
+    # outside Florida now that the directory is national.
+    state: str | None = None
+    # Set when the submitter picked an existing venue from the Add Show
+    # picker (At Current Location flow). Bypasses fuzzy matching — the show
+    # is merged straight into that venue row.
+    existing_venue_id: int | None = None
 
 
 class VenueSubmissionResponse(BaseModel):
@@ -1072,6 +1221,11 @@ class KJOut(BaseModel):
     song_request_required: bool = False
     notify_push: bool = True
     notify_sms: bool = True
+    # Private-hire availability — powers the KJ hire pages ("DJ for hire in
+    # Orlando"). Self-reported; hire_note is a short free-text blurb the KJ
+    # controls (service area, typical pricing, event types).
+    available_for_hire: bool = False
+    hire_note: str | None = None
 
 
 class LineupJoinRequest(BaseModel):
@@ -1163,6 +1317,9 @@ def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None, kj_song_r
         "stripe_account_id": row["stripe_account_id"] if "stripe_account_id" in row.keys() else None,
         "stripe_onboarding_status": row["stripe_onboarding_status"] if "stripe_onboarding_status" in row.keys() else "none",
         "song_request_required": kj_song_required,
+        "state": row["state"] if "state" in row.keys() else None,
+        "source": row["source"] if "source" in row.keys() else None,
+        "confidence": row["confidence"] if "confidence" in row.keys() else None,
     }
 
 
@@ -1386,6 +1543,85 @@ def list_submissions(status: str | None = Query(None, description="Filter by sta
                 "SELECT * FROM venue_submissions ORDER BY created_at DESC"
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+# NOTE: must be declared before /venues/{venue_id} — that route types
+# venue_id as int, so "nearby-lookup" would 422 instead of matching here.
+class NearbyLookupResponse(BaseModel):
+    """Result of the Add Show 'At Current Location' lookup.
+
+    matched_venues: venues at essentially the submitter's coordinates (inside
+    the building) — if non-empty, the KJ just picks one instead of typing.
+    nearby_venues: a wider radius for the picker UI.
+    address_hint: reverse-geocoded street address to prefill the form when
+    nothing matches.
+    """
+
+    matched_venues: list[dict] = []
+    nearby_venues: list[dict] = []
+    address_hint: str | None = None
+
+
+@app.get(f"{API_PREFIX}/venues/nearby-lookup", response_model=NearbyLookupResponse)
+def nearby_lookup(lat: float, lng: float):
+    """Resolve GPS coordinates to candidate venues + an address hint.
+
+    Powers the mobile Add Show flow: the KJ taps 'At Current Location', we
+    reverse-geocode and match against existing venue rows so the form can
+    prefill (or skip) the venue section entirely.
+    """
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM venues").fetchall()
+
+    exact: list[tuple[float, sqlite3.Row]] = []
+    nearby: list[tuple[float, sqlite3.Row]] = []
+    for r in rows:
+        if r["lat"] is None or r["lng"] is None:
+            continue
+        dist = haversine_miles(lat, lng, r["lat"], r["lng"])
+        # ~260 ft. Phone GPS inside a building easily drifts 100-200 ft, and
+        # a wrong auto-pick is recoverable in one tap ("Change venue"), so
+        # err generous rather than making the KJ type.
+        if dist <= 0.05:
+            exact.append((dist, r))
+        elif dist <= 1.0:
+            nearby.append((dist, r))
+
+    exact.sort(key=lambda t: t[0])
+    nearby.sort(key=lambda t: t[0])
+
+    address_hint = None
+    try:
+        import urllib.parse as up
+        rev_url = (
+            "https://nominatim.openstreetmap.org/reverse?"
+            f"lat={up.quote(str(lat))}&lon={up.quote(str(lng))}&format=json&zoom=18&addressdetails=1"
+        )
+        rev_req = UrllibRequest(rev_url)
+        rev_req.add_header("User-Agent", "TheHopper/1.0")
+        with urlopen(rev_req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        addr = data.get("address", {})
+        house = addr.get("house_number", "")
+        road = addr.get("road", "")
+        city = (
+            addr.get("city")
+            or addr.get("town")
+            or addr.get("village")
+            or addr.get("hamlet")
+            or ""
+        )
+        parts = [p for p in (f"{house} {road}".strip(), city) if p]
+        if parts:
+            address_hint = ", ".join(parts)
+    except Exception:
+        pass  # Reverse geocoding is a convenience — never block the form
+
+    return NearbyLookupResponse(
+        matched_venues=[venue_row_to_dict(r) for _, r in exact[:5]],
+        nearby_venues=[venue_row_to_dict(r) for _, r in nearby[:10]],
+        address_hint=address_hint,
+    )
 
 
 @app.get(f"{API_PREFIX}/venues/{{venue_id}}", response_model=VenueOut)
@@ -2835,24 +3071,53 @@ async def stripe_webhook(request: Request) -> dict[str, str]:
 
 @app.post(f"{API_PREFIX}/venues/submit", response_model=VenueSubmissionResponse)
 def submit_venue(req: VenueSubmissionRequest):
-    """Submit a new karaoke spot for moderation.
+    """Submit a new karaoke spot — or a show at an existing one.
 
     If is_kj=True, the submitter is claiming to be the KJ. They'll need
     to complete phone verification + KJ onboarding after submission.
 
-    Checks for duplicate venues using fuzzy name matching + geographic
-    proximity before accepting the submission.
+    Duplicate venues are not rejected: with the directory seeded nationally,
+    the common case is adding a show at a venue that already exists, so the
+    show is merged into the existing row.
     """
     if not req.name.strip() or not req.address.strip() or not req.city.strip():
         raise HTTPException(status_code=400, detail="Name, address, and city are required")
 
     nights = ",".join(req.karaoke_nights) if req.karaoke_nights else ""
 
-    # Geocode the address (simple approach — just store nulls if it fails)
+    # Fast path: the client picked an existing venue from the Add Show
+    # picker. No geocoding or fuzzy matching needed — merge and go.
+    if req.existing_venue_id:
+        with db() as conn:
+            venue = conn.execute(
+                "SELECT name FROM venues WHERE id=?", (req.existing_venue_id,)
+            ).fetchone()
+            if not venue:
+                raise HTTPException(status_code=404, detail="Venue not found")
+            _merge_show_into_venue(conn, req.existing_venue_id, req)
+            merged = conn.execute(
+                "SELECT karaoke_nights FROM venues WHERE id=?", (req.existing_venue_id,)
+            ).fetchone()
+        merged_nights = [n for n in (merged["karaoke_nights"] or "").split(",") if n]
+        return VenueSubmissionResponse(
+            id=req.existing_venue_id,
+            status="show_added",
+            message=(
+                f"Thanks! Your show at '{venue['name']}' is live. "
+                f"Nights: {', '.join(merged_nights)}."
+            ),
+        )
+
+    # Geocode the address (simple approach — just store nulls if it fails).
+    # State is appended when the client supplied it; the old hardcoded
+    # ", FL" broke every submission outside Florida.
     lat, lng = None, None
     try:
         import urllib.parse as up
-        geocode_url = f"https://nominatim.openstreetmap.org/search?q={up.quote(req.address + ', ' + req.city + ', FL')}&format=json&limit=1"
+        geo_q = req.address + ", " + req.city
+        if req.state:
+            geo_q += ", " + req.state
+        geocode_url = f"https://nominatim.openstreetmap.org/search?q={up.quote(geo_q)}&format=json&limit=1"
         geo_req = UrllibRequest(geocode_url)
         geo_req.add_header("User-Agent", "TheHopper/1.0")
         with urlopen(geo_req, timeout=10) as resp:
@@ -2863,7 +3128,13 @@ def submit_venue(req: VenueSubmissionRequest):
     except Exception:
         pass  # Geocoding is optional — admin can fix later
 
-    # Canonicalization: check for duplicates before accepting
+    # Canonicalization: check for duplicates before accepting.
+    #
+    # Duplicate ≠ rejection anymore. With the national directory seeded from
+    # scrapes, the normal case is "add a show at a venue that already exists."
+    # If the submission carries nights/times, merge the show into the existing
+    # venue row (and bump confidence, since a human just confirmed it). Only a
+    # bare duplicate venue with no schedule is redundant.
     with db() as conn:
         dupe = _check_duplicate_venue(conn, req.name, req.address, req.city, lat, lng)
     if dupe:
@@ -2874,6 +3145,24 @@ def submit_venue(req: VenueSubmissionRequest):
                 status="duplicate_pending",
                 message=f"A submission for '{dupe['name']}' is already pending review.",
             )
+
+        has_schedule = bool(req.karaoke_nights)
+        if has_schedule and dupe.get("id"):
+            with db() as conn:
+                _merge_show_into_venue(conn, dupe["id"], req)
+                merged = conn.execute(
+                    "SELECT karaoke_nights FROM venues WHERE id=?", (dupe["id"],)
+                ).fetchone()
+            merged_nights = [n for n in (merged["karaoke_nights"] or "").split(",") if n]
+            return VenueSubmissionResponse(
+                id=dupe["id"],
+                status="show_added",
+                message=(
+                    f"Thanks! Your show at '{dupe['name']}' is live. "
+                    f"Nights: {', '.join(merged_nights)}."
+                ),
+            )
+
         return VenueSubmissionResponse(
             id=dupe["id"],
             status="duplicate",
@@ -2920,8 +3209,8 @@ def approve_submission(submission_id: int):
             """INSERT INTO venues
                (name, address, city, lat, lng, karaoke_nights, start_time, end_time,
                 kj_name, phone, website, price_jump_queue, premium_slot_position,
-                premium_slot_price, vibe)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                premium_slot_price, vibe, source, confidence)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 sub["name"], sub["address"], sub["city"],
                 sub["lat"] if sub["lat"] is not None else 0.0,
@@ -2929,6 +3218,12 @@ def approve_submission(submission_id: int):
                 sub["karaoke_nights"], sub["start_time"], sub["end_time"],
                 sub["kj_name"], sub["phone"], sub["website"],
                 5.0, 3, 5.0, sub["vibe"],
+                # A human-submitted venue with nights listed is as good as it
+                # gets short of a KJ claiming it themselves.
+                "user_submission", "claimed" if sub["is_kj"] else "unverified",
+                # State for the SEO hub pages. Parse it from the address tail
+                # if the submitter didn't supply it ("... Melbourne, FL 32901").
+                _state_from_address(sub["address"]),
             ),
         )
         venue_id = cur.lastrowid
@@ -2954,7 +3249,6 @@ def approve_submission(submission_id: int):
                 kj_id = kj_cur.lastrowid
             # Link KJ to venue
             conn.execute("UPDATE venues SET kj_id=? WHERE id=?", (kj_id, venue_id))
-
     # Notify submitter
     if sub["submitter_phone"]:
         send_sms(
@@ -3063,6 +3357,8 @@ def _kj_row_to_out(row: sqlite3.Row) -> KJOut:
         song_request_required=bool(row["song_request_required"]) if "song_request_required" in keys else False,
         notify_push=bool(row["notify_push"]) if "notify_push" in keys else True,
         notify_sms=bool(row["notify_sms"]) if "notify_sms" in keys else True,
+        available_for_hire=bool(row["available_for_hire"]) if "available_for_hire" in keys else False,
+        hire_note=row["hire_note"] if "hire_note" in keys else None,
     )
 
 
@@ -3181,8 +3477,10 @@ def update_kj_settings(
     song_request_required: bool | None = None,
     notify_push: bool | None = None,
     notify_sms: bool | None = None,
+    available_for_hire: bool | None = None,
+    hire_note: str | None = None,
 ):
-    """Update KJ preferences: song requests and how they want to be alerted."""
+    """Update KJ preferences: song requests, alerts, and private-hire availability."""
     with db() as conn:
         row = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
         if not row:
@@ -3201,6 +3499,16 @@ def update_kj_settings(
             conn.execute(
                 "UPDATE kjs SET notify_sms=? WHERE id=?",
                 (1 if notify_sms else 0, kj_id),
+            )
+        if available_for_hire is not None:
+            conn.execute(
+                "UPDATE kjs SET available_for_hire=? WHERE id=?",
+                (1 if available_for_hire else 0, kj_id),
+            )
+        if hire_note is not None:
+            conn.execute(
+                "UPDATE kjs SET hire_note=? WHERE id=?",
+                (hire_note.strip(), kj_id),
             )
         row = conn.execute("SELECT * FROM kjs WHERE id=?", (kj_id,)).fetchone()
     return _kj_row_to_out(row)

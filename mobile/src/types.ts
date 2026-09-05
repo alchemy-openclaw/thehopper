@@ -19,6 +19,10 @@ export interface Venue {
   image_url?: string | null;
   distance_miles: number | null;
   song_request_required: boolean;
+  /** Directory provenance (seed data vs community/KJ-curated rows). */
+  state?: string | null;
+  source?: string | null;
+  confidence?: string | null;
 }
 
 export interface Song {
@@ -96,6 +100,8 @@ export interface VenueSubmission {
   vibe?: string | null;
   is_kj: boolean;
   submitter_phone?: string | null;
+  state?: string | null;
+  existing_venue_id?: number | null;
 }
 
 export interface VenueSubmissionResponse {
@@ -135,6 +141,9 @@ export interface KJ {
   /** How the KJ wants to be alerted about payments and singers. */
   notify_push?: boolean;
   notify_sms?: boolean;
+  /** Private-hire availability — powers the KJ hire pages. */
+  available_for_hire?: boolean;
+  hire_note?: string | null;
 }
 
 export interface PhoneVerifyResponse {

@@ -251,6 +251,22 @@ export const api = {
 
   // --- Venue submission (add a karaoke spot) ---
 
+  /**
+   * Resolve the device's GPS position to candidate venues + an address hint
+   * for the Add Show "At Current Location" flow.
+   */
+  nearbyLookup: (lat: number, lng: number) =>
+    jsonFetch<{
+      matched_venues: Venue[];
+      nearby_venues: Venue[];
+      address_hint: string | null;
+    }>(
+      withQuery(`${API_BASE}/venues/nearby-lookup`, {
+        lat: String(lat),
+        lng: String(lng),
+      }),
+    ),
+
   submitVenue: (submission: VenueSubmission) =>
     jsonFetch<VenueSubmissionResponse>(`${API_BASE}/venues/submit`, {
       method: 'POST',
@@ -331,6 +347,8 @@ export const api = {
       song_request_required?: boolean;
       notify_push?: boolean;
       notify_sms?: boolean;
+      available_for_hire?: boolean;
+      hire_note?: string;
     },
   ) => {
     const params = new URLSearchParams();
