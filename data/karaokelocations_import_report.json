@@ -1,0 +1,7 @@
+{
+ "total": 1835,
+ "matched_existing": 20,
+ "inserted": 1815,
+ "skipped_missing_name_or_city": 0,
+ "inserted_without_geocode": 232
+}
