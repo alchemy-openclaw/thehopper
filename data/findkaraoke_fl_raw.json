@@ -1,0 +1,2245 @@
+[
+  {
+    "venue_name": "O'Brian's Irish Pub",
+    "address": "51 SE 1st Ave., Boca Raton, FL 33432",
+    "city": "Boca Raton",
+    "city_raw": "boca raton",
+    "phone": "",
+    "about": "Drunken Karaoke every Friday, 10:30pm - 2am. Hosted by @Frank-E-Oke. Liquor pitchers available for $7. Always call to confirm schedule.",
+    "schedule": [
+      {
+        "day": "Friday",
+        "start_time": "10:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday",
+    "karaoke_start_time": "10:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/boca-raton/venues/o-brian-s-irish-pub",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Turn 3 Sports Bar",
+    "address": "23032 Sandalfoot Plaza Dr, Boca Raton, FL 33428",
+    "city": "Boca Raton",
+    "city_raw": "boca raton",
+    "phone": "(561) 483-1964",
+    "about": "Karaoke Sundays 8pm-12am.",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Sunday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/boca-raton/venues/turn-3-sports-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "MAJOR'S DIVE BAR",
+    "address": "1403 Boynton Beach Blvd, Boynton Beach, FL 33426",
+    "city": "Boynton Beach",
+    "city_raw": "boynton beach",
+    "phone": "",
+    "about": "Karaoke every Monday and Thursday from 8pm to midnight (and later if the party keeps going). Hosted by @Kyle Luster with @The Pinkerton Agency. Free admission.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday, Thursday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/boynton-beach/venues/major-s-dive-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Clancy's Irish Sports Pub & Grill",
+    "address": "6218 Cortez Rd W, Bradenton, FL 34210",
+    "city": "Bradenton",
+    "city_raw": "bradenton",
+    "phone": "(941) 794-2489",
+    "about": "Karaoke Thursday-Saturday 9pm-1am hosted by @Andre.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/bradenton/venues/clancy-s-irish-sports-pub-grill",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "In Cahoots",
+    "address": "5917 Manatee Ave W # 509, Bradenton, FL 34209",
+    "city": "Bradenton",
+    "city_raw": "bradenton",
+    "phone": "(941) 794-1141",
+    "about": "Karaoke Tuesday, Thursday, Friday, and Saturday from 10pm to close. 21 and up.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday",
+    "karaoke_start_time": "10:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/bradenton/venues/in-cahoots",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Back Streets Sports Bar",
+    "address": "915 SE 47th Terrace, Cape Coral, FL 33904",
+    "city": "Cape Coral",
+    "city_raw": "cape coral",
+    "phone": "(239) 945-7555",
+    "about": "Karaoke 7 nights a week, 9:30pm - Close. Vast catalog including country, pop, rock and oldies.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/cape-coral/venues/back-streets-sports-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "The Bar",
+    "address": "172 Giralda Ave, Coral Gables, FL 33134",
+    "city": "Coral Gables",
+    "city_raw": "coral gables",
+    "phone": "(305) 442-2730",
+    "about": "Karaoke every Tuesday night starting at 10pm with prizes and drink specials.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Tuesday",
+    "karaoke_start_time": "10:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/coral-gables/venues/the-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "J D's Bar & Lounge",
+    "address": "10311 W Sample Rd, Coral Springs, FL 33065",
+    "city": "Coral Springs",
+    "city_raw": "coral springs",
+    "phone": "(954) 752-3227",
+    "about": "Karaoke every Wednesday at 9:30pm.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Wednesday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/coral-springs/venues/j-d-s-bar-lounge",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Sharkey's Bar & Grill",
+    "address": "10365 Royal Palm Blvd, Coral Springs, FL 33065",
+    "city": "Coral Springs",
+    "city_raw": "coral springs",
+    "phone": "",
+    "about": "Karaoke every Tuesday night from 9pm-1am.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Tuesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/coral-springs/venues/sharkey-s-bar-grill",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Dirty Harry's Pub & Package",
+    "address": "705 Main St Bridge, Daytona Beach, FL 32118",
+    "city": "Daytona Beach",
+    "city_raw": "daytona beach",
+    "phone": "(386) 243-5304",
+    "about": "Karaoke/DJ night Friday and Saturday 9pm to close hosted by @DJSkratch.",
+    "schedule": [
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/daytona-beach/venues/dirty-harry-s-pub-package-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Ocean Deck Restaurant & Beach Bar",
+    "address": "127 S Ocean Ave, Daytona Beach, FL 32118",
+    "city": "Daytona Beach",
+    "city_raw": "daytona beach",
+    "phone": "(386) 253-5224",
+    "about": "Karaoke Saturday and Sunday 2pm-6pm hosted by @StorminNorman on the beach stage.",
+    "schedule": [],
+    "karaoke_nights": "",
+    "karaoke_start_time": "",
+    "karaoke_end_time": "",
+    "detail_url": "/daytona-beach/venues/ocean-deck-restaurant-beach-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "YAYA's Beachside Bar",
+    "address": "112 Dunlawton Blvd, Daytona Beach Shores, FL 32118",
+    "city": "Daytona Beach",
+    "city_raw": "daytona beach",
+    "phone": "(386) 756-1110",
+    "about": "Karaoke every night, 9:30pm-1:30am. Tuesday hosted by @MichaelLeone.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/daytona-beach/venues/yaya-s-beachside-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Just 1 More Rooster",
+    "address": "1382 Howland Blvd, Deltona, FL 32738",
+    "city": "Deltona",
+    "city_raw": "deltona",
+    "phone": "(386) 860-0035",
+    "about": "Monday night karaoke hosted by @Sickman.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/deltona/venues/just-1-more-rooster",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Elbo Room",
+    "address": "241 S Fort Lauderdale Beach Blvd, Fort Lauderdale, FL 33316",
+    "city": "Fort Lauderdale",
+    "city_raw": "fort lauderdale",
+    "phone": "(954) 463-4615",
+    "about": "Karaoke every Tuesday at 8pm on the second floor of this historic Fort Lauderdale Beach dive bar.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Tuesday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/fort-lauderdale/venues/elbo-room",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Oasis Pub",
+    "address": "3224 W Commercial Blvd, Fort Lauderdale, FL 33309",
+    "city": "Fort Lauderdale",
+    "city_raw": "fort lauderdale",
+    "phone": "(954) 733-6688",
+    "about": "Karaoke every Wednesday and Friday at 8 PM. Arrive early to secure your spot as it fills up quickly. Hosted by @DJ Maverick. No food served but outside food welcome. Pool table and darts also available.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Wednesday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/fort-lauderdale/venues/oasis-pub",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Mona Lisa Italian Restaurant",
+    "address": "7091 College Pkwy #17, Fort Myers, FL 33907",
+    "city": "Fort Myers",
+    "city_raw": "fort myers",
+    "phone": "(239) 939-5344",
+    "about": "Karaoke nightly (Tue-Sun, closed Mondays) starting at 9pm. 15,000+ songs. 21+.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/fort-myers/venues/mona-lisa-italian-restaurant",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Loosey's Downtown Gainesville",
+    "address": "120 SW 1st Ave, Gainesville, FL 32601",
+    "city": "Gainesville",
+    "city_raw": "gainesville",
+    "phone": "(352) 672-6465",
+    "about": "Karaoke Saturdays 9pm-1am.",
+    "schedule": [
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Saturday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/gainesville/venues/loosey-s-downtown-gainesville",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Splitz of Gainesville",
+    "address": "1301 NW 76th Blvd, Gainesville, FL 32606",
+    "city": "Gainesville",
+    "city_raw": "gainesville",
+    "phone": "(352) 332-2695",
+    "about": "Karaoke Fridays at 9pm at bowling/entertainment facility.",
+    "schedule": [
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/gainesville/venues/splitz-of-gainesville",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Stage 7 Karaoke Party Rooms & Bar",
+    "address": "4110 SW 34th St #1, Gainesville, FL 32608",
+    "city": "Gainesville",
+    "city_raw": "gainesville",
+    "phone": "(352) 234-3838",
+    "about": "Gainesville's only private-room karaoke lounge. Each room has a unique theme with high-quality sound systems. Song library includes American pop, Chinese, Korean, and Japanese music via YouTube. Cocktails, beer, sake, wine, hookah, and bubble milk tea available. Open Mon-Fri 7pm-1am, Sat-Sun 2pm-1am.",
+    "schedule": [],
+    "karaoke_nights": "",
+    "karaoke_start_time": "",
+    "karaoke_end_time": "",
+    "detail_url": "/gainesville/venues/stage-7-karaoke-party-rooms-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "O'Maddy's Bar & Grille",
+    "address": "5405 Shore Blvd S, Gulfport, FL 33707",
+    "city": "Gulfport",
+    "city_raw": "gulfport",
+    "phone": "",
+    "about": "Karaoke Thursday through Sunday at 9:30 PM. Waterfront bar & grille.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/gulfport/venues/o-maddy-s-bar-grille",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "PlugIN Karaoke",
+    "address": "801 Silks Run Suite 2597, Hallandale Beach, FL 33009",
+    "city": "Hallandale Beach",
+    "city_raw": "hallandale beach",
+    "phone": "(844) 475-8446",
+    "about": "Open mic karaoke nights. Thursday 6 PM - 12 AM, Friday 4 PM - late, Saturday 3 PM - 2 AM, Sunday 4 PM - 12 AM.",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "04:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "04:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Sunday",
+    "karaoke_start_time": "04:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/hallandale-beach/venues/plugin-karaoke-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "9 Feet Under",
+    "address": "885 SE 14th St Side Entrance, Hialeah, FL 33010",
+    "city": "Hialeah",
+    "city_raw": "hialeah",
+    "phone": "(305) 414-6950",
+    "about": "Karaoke Night every Thursday 9PM-12AM. Speakeasy-style venue with craft cocktails.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Thursday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/hialeah/venues/9-feet-under",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "BLEAF KARAOKE LOUNGE",
+    "address": "1808 S Young Cir, Hollywood, FL 33020",
+    "city": "Hollywood",
+    "city_raw": "hollywood",
+    "phone": "(786) 956-0102",
+    "about": "Open karaoke bar with shared-space singing and laid-back atmosphere. Karaoke starts nightly at 8:30 PM. Bar opens at 2 PM daily.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "08:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/hollywood/venues/bleaf-karaoke-lounge",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Austin Karaoke",
+    "address": "5161 Beach Blvd #4, Jacksonville, FL 32207",
+    "city": "Jacksonville",
+    "city_raw": "jacksonville",
+    "phone": "(904) 789-2395",
+    "about": "Private karaoke rooms. $20/person for 3 hours. Hours: Tue-Thu & Sun 6 PM - 12 AM, Fri-Sat 6 PM - 2 AM, closed Mon.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "06:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/jacksonville/venues/austin-karaoke-3",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Eclipse Bar Riverside",
+    "address": "4219 St Johns Ave, Jacksonville, FL 32210",
+    "city": "Jacksonville",
+    "city_raw": "jacksonville",
+    "phone": "(904) 228-4663",
+    "about": "Karaoke on Wednesdays and Fridays at 9pm. No cover charge. 21+. Alternative nightlife venue with live music and themed nights.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/jacksonville/venues/eclipse-bar-riverside",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Mc B's Lounge",
+    "address": "6217 St Augustine Rd, Jacksonville, FL 32217",
+    "city": "Jacksonville",
+    "city_raw": "jacksonville",
+    "phone": "(904) 731-1355",
+    "about": "Karaoke 7 nights a week starting at 8:30pm. Also offers trivia on Mondays, bingo on Tuesdays, and pool tournaments.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "08:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "08:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/jacksonville/venues/mc-b-s-lounge",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Monkey's Uncle Tavern",
+    "address": "10503 San Jose Blvd #12, Jacksonville, FL 32257",
+    "city": "Jacksonville",
+    "city_raw": "jacksonville",
+    "phone": "",
+    "about": "Karaoke every Wednesday 9 PM - 1 AM as part of \"Wine Down Wednesday\" (wine happy hour 4-7:30 PM, buy one glass get second free). Full kitchen with wings.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/jacksonville/venues/monkey-s-uncle-tavern-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Mango's Beach Bar",
+    "address": "602 1st St N, Jacksonville Beach, FL 32250",
+    "city": "Jacksonville Beach",
+    "city_raw": "jacksonville beach",
+    "phone": "(904) 246-4200",
+    "about": "Karaoke every Wednesday and Sunday night starting at 9 PM.\n602 1st St N, Jacksonville Beach, FL 32250",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Sunday, Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/jacksonville-beach/venues/mango-s-beach-bar-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Monkey's Uncle Tavern",
+    "address": "1728 3rd St N, Jacksonville Beach, FL 32250",
+    "city": "Jacksonville Beach",
+    "city_raw": "jacksonville beach",
+    "phone": "(904) 246-1070",
+    "about": "Karaoke Wednesdays, Saturdays, and Sundays at 9:30 PM. Prizes for top 3 performances each night.\n1728 3rd St N, Jacksonville Beach, FL 32250",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Saturday, Sunday, Wednesday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/jacksonville-beach/venues/monkey-s-uncle-tavern",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "The Karaoke Lounge",
+    "address": "618 Duval St, Key West, FL 33040",
+    "city": "Key West",
+    "city_raw": "key west",
+    "phone": "(305) 395-0213",
+    "about": "Karaoke nightly 8 PM\u20131 AM with an in-house DJ. Drop in for a song, reserve the VIP private room, or book out the entire lounge.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/key-west/venues/the-karaoke-lounge",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "T-Bows 33 Lounge & Package",
+    "address": "4106 Lakeland Hills Blvd, Lakeland, FL 33805",
+    "city": "Lakeland",
+    "city_raw": "lakeland",
+    "phone": "",
+    "about": "Wednesday night karaoke 7-11PM. Friday & Saturday night karaoke 9PM-2AM. Also features pool tables, dart boards, and a jukebox. Free pool & darts on Wednesday.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "07:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Wednesday",
+    "karaoke_start_time": "07:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/lakeland/venues/t-bows-33-lounge-package",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Slingers Bar",
+    "address": "3120 W New Haven Ave, Melbourne, FL 32904",
+    "city": "Melbourne",
+    "city_raw": "melbourne",
+    "phone": "(321) 914-0849",
+    "about": "Karaoke every Thursday night at 9pm ('Larryoke') hosted by @Larry.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Thursday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/melbourne/venues/slingers-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "1-800-Lucky",
+    "address": "143 NW 23rd St, Miami, FL 33127",
+    "city": "Miami",
+    "city_raw": "miami",
+    "phone": "(305) 768-9826",
+    "about": "Private karaoke room available daily. Mon-Thu & Sun 12 PM - 1 AM, Fri-Sat 12 PM - 3 AM. Asian food hall in Wynwood, 10,000 sq ft.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "12:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "12:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "12:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "12:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "12:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "12:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "12:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "12:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/miami/venues/1-800-lucky",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Eddie's Place",
+    "address": "12606 SW 8th St, Miami, FL 33184",
+    "city": "Miami",
+    "city_raw": "miami",
+    "phone": "(305) 226-1421",
+    "about": "Karaoke every Tuesday and Friday at 10 PM. 21+. Hosted by @KaptainKaraoke.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Tuesday",
+    "karaoke_start_time": "10:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/miami/venues/eddie-s-place",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Gramps",
+    "address": "176 NW 24th St, Miami, FL 33127",
+    "city": "Miami",
+    "city_raw": "miami",
+    "phone": "",
+    "about": "Let's Sang karaoke every Monday at 9pm. Hosted by @Angelica Rose. Karaoke for music nerds, running since 2012. Free event with 44,000 songs to choose from. QR codes available for signing up. Song requests close at 11pm. 21+.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/miami/venues/gramps",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Seven Seas Bar",
+    "address": "2200 SW 57th Ave, Miami, FL 33155",
+    "city": "Miami",
+    "city_raw": "miami",
+    "phone": "(305) 266-6071",
+    "about": "Karaoke Mon, Tue, Thu, and Sat starting at 10 PM. Hosted by @Karaoke DJ Bernie. Cash only (ATM on site). No food served but outside food allowed. Pool table. Nautical-themed dive bar.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday, Saturday, Thursday, Tuesday",
+    "karaoke_start_time": "10:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/miami/venues/seven-seas-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Sweet Caroline Karaoke Bar - Brickell",
+    "address": "1111 SW 1st Ave #107, Miami, FL 33130",
+    "city": "Miami",
+    "city_raw": "miami",
+    "phone": "(786) 673-2522",
+    "about": "Karaoke every night. Mon & Sun 6 PM - 3 AM, Tue-Sat 6 PM - 4 AM. Happy hour daily 6-8 PM. Ladies Night Wednesdays (ladies drink free 8-11 PM). Also has Wynwood location open Wed-Sat.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "06:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/miami/venues/sweet-caroline-karaoke-bar-brickell",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Sweet Caroline Karaoke Bar - Wynwood",
+    "address": "2445 N Miami Ave, Miami, FL 33127",
+    "city": "Miami",
+    "city_raw": "miami",
+    "phone": "(305) 990-8305",
+    "about": "Dedicated karaoke bar open Wednesday-Saturday 6PM-4AM. Voted Miami's Best Karaoke Bar. Happy Hour daily 6PM-8PM with $3 beers to $7 specialty cocktails. Wednesdays: ladies drink free with complimentary well drinks 8PM-11PM.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday, Wednesday",
+    "karaoke_start_time": "06:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/miami/venues/sweet-caroline-karaoke-bar-wynwood",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Tokyo Sushi Speakeasy",
+    "address": "1000 Collins Ave, 10th St Entrance, Miami Beach, FL 33139",
+    "city": "Miami Beach",
+    "city_raw": "miami beach",
+    "phone": "(786) 728-9318",
+    "about": "Sushi and karaoke bar open daily from 5 PM to midnight. Expansive karaoke song list with originally crafted cocktails and sake. Located inside the Fairwind Hotel on Collins Ave.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "05:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/miami-beach/venues/tokyo-sushi-speakeasy",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Big Dog Saloon",
+    "address": "4060 County Rd 19A, Mt Dora, FL 32757",
+    "city": "Mount Dora",
+    "city_raw": "mount dora",
+    "phone": "(407) 728-0136",
+    "about": "Extreme karaoke 7 nights a week starting at 9:30pm.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/mount-dora/venues/big-dog-saloon",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Harold's Place Chickee Bar And Grill",
+    "address": "2555 Tamiami Trl N, Naples, FL 34103",
+    "city": "Naples",
+    "city_raw": "naples",
+    "phone": "(239) 263-7254",
+    "about": "Karaoke every Sunday from 2-6pm",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "02:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Sunday",
+    "karaoke_start_time": "02:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/naples/venues/harold-s-place-chickee-bar-and-grill",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Flagler Tavern",
+    "address": "414 Flagler Ave, New Smyrna Beach, FL 32169",
+    "city": "New Smyrna Beach",
+    "city_raw": "new smyrna beach",
+    "phone": "(386) 402-8861",
+    "about": "Karaoke Tuesdays 8pm-11pm with @BigWill.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Tuesday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/new-smyrna-beach/venues/flagler-tavern",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Brooke's Restaurant & Lounge",
+    "address": "4450 Hancock Bridge Pkwy, Fort Myers, FL 33903",
+    "city": "North Fort Myers",
+    "city_raw": "north fort myers",
+    "phone": "(239) 995-1900",
+    "about": "Karaoke Friday and Saturday 9pm-2am.",
+    "schedule": [
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/north-fort-myers/venues/brooke-s-restaurant-lounge",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Charlie Horse",
+    "address": "2426 E Silver Springs Blvd, Ocala, FL 34470",
+    "city": "Ocala",
+    "city_raw": "ocala",
+    "phone": "",
+    "about": "Karaoke from 9PM to close, Wednesday through Saturday. Locally owned and operated since 1983. Features indoor and outdoor seating, dancing, great food and a full bar.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday, Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/ocala/venues/charlie-horse",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Big Daddy's Orlando",
+    "address": "3001 Corrine Dr, Orlando, FL 32803",
+    "city": "Orlando",
+    "city_raw": "orlando",
+    "phone": "(407) 644-2844",
+    "about": "Orlando's self-described #1 Karaoke & Sports Bar. Karaoke starts at 8 PM daily.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/orlando/venues/big-daddy-s-orlando-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "KTV Orlando",
+    "address": "7130 S Orange Blossom Trl, Orlando, FL 32809",
+    "city": "Orlando",
+    "city_raw": "orlando",
+    "phone": "(407) 856-9997",
+    "about": "Korean-style private karaoke rooms (norebang). Open 7:30pm-2am daily. Room prices: Small (2-3 guests) $25/hr, Medium (4-6 guests) $30/hr, Large (6-10 guests) $35/hr, Extra Large (10+ guests) $40/hr. Songs in English, Korean, Chinese, Japanese, Vietnamese, Tagalog, Spanish, Indonesian, and Russian. Free pool all night.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "07:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "07:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "07:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "07:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "07:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "07:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "07:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "07:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/orlando/venues/ktv-orlando",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "O'Shucks Karaoke Bar",
+    "address": "7467 International Dr, Orlando, FL 32819",
+    "city": "Orlando",
+    "city_raw": "orlando",
+    "phone": "(407) 352-7892",
+    "about": "Karaoke every night starting at 9pm. No cover charge. 21+ only with valid driver's license or passport. A purchase is required to sing. Digital karaoke system with surround sound. Voted \"Best Karaoke Bars in Central Florida\" by Orlando Weekly.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/orlando/venues/o-shucks-karaoke-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Q Karaoke",
+    "address": "4519 S Orange Blossom Trl, Orlando, FL 32839",
+    "city": "Orlando",
+    "city_raw": "orlando",
+    "phone": "(407) 476-8280",
+    "about": "7 private karaoke rooms accommodating groups up to 30, with Korean, Chinese, Japanese, Filipino, Latin, and English songs. Open daily 5 PM\u20132 AM. No cover; rooms charged by the hour.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "05:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/orlando/venues/q-karaoke-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Shady Oaks Lounge & Package",
+    "address": "6050 Babcock St SE #1314, Palm Bay, FL 32909",
+    "city": "Palm Bay",
+    "city_raw": "palm bay",
+    "phone": "(321) 727-7004",
+    "about": "Karaoke Tuesdays, Thursdays, Saturdays, and Sundays at 9:30pm. Hosted by @DJCraig.",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Saturday, Sunday, Thursday, Tuesday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/palm-bay/venues/shady-oaks-lounge-package",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Swampgrass Willy's",
+    "address": "9910 FL A1AAlt #711, Palm Beach Gardens, FL 33410",
+    "city": "Palm Beach Gardens",
+    "city_raw": "palm beach gardens",
+    "phone": "",
+    "about": "Karaoke Friday and Sunday nights at 10 PM. Sing on a professional stage with over 1,000 songs to choose from. Hosted by @Alex.",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Sunday",
+    "karaoke_start_time": "10:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/palm-beach-gardens/venues/swampgrass-willy-s",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Donovan's Bar PCB",
+    "address": "15726 Front Beach Rd Suite 200, Panama City Beach, FL 32413",
+    "city": "Panama City Beach",
+    "city_raw": "panama city beach",
+    "phone": "(850) 230-6900",
+    "about": "Karaoke every night from 9 PM to 1 AM. No cover charge.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/panama-city-beach/venues/donovan-s-bar-pcb",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Seville Quarter",
+    "address": "130 E Government St, Pensacola, FL 32502",
+    "city": "Pensacola",
+    "city_raw": "pensacola",
+    "phone": "(850) 434-6211",
+    "about": "\"Karaoke at the Quarter\" Sun/Wed/Thu/Fri/Sat 8pm-11pm in the Lili Marlene's room.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday, Wednesday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/pensacola/venues/seville-quarter",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Sir Richard's Public House",
+    "address": "2719 E Cervantes St, Pensacola, FL 32503",
+    "city": "Pensacola",
+    "city_raw": "pensacola",
+    "phone": "(850) 434-9828",
+    "about": "Karaoke on Monday, Tuesday, and Thursday nights starting at 9:00 PM. Monday is Ladies Night Karaoke with $2 off martinis and $5 off bottles of wine. Thursday features specials on Michelob Ultra Draft, NUTRL, Tito's, and Paddy's starting at 7:00 PM. Late night service industry specials from 1:00-3:00 AM.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday, Thursday, Tuesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/pensacola/venues/sir-richard-s-public-house",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Good Fortune St. Pete",
+    "address": "260 1st Ave S #100, St. Petersburg, FL 33701",
+    "city": "Saint Petersburg",
+    "city_raw": "saint petersburg",
+    "phone": "(727) 287-3881",
+    "about": "Private karaoke rooms open Tuesday - Sunday at 5 PM. Asian fusion restaurant in Station House downtown. Reservation-based. No food in karaoke rooms. 21+ after 9 PM Fri/Sat.\n260 1st Ave S #100, St. Petersburg, FL 33701",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "05:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/saint-petersburg/venues/good-fortune-st-pete-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Rhonda's--A Neighborhood Bar",
+    "address": "2617 S Orlando Dr, Sanford, FL 32773",
+    "city": "Sanford",
+    "city_raw": "sanford",
+    "phone": "",
+    "about": "Karaoke with @Rhonda on Friday nights starting at 9pm",
+    "schedule": [
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/sanford/venues/rhonda-s-a-neighborhood-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Captain Curt's Sniki Tiki Bar & Live Entertainment - Siesta Key",
+    "address": "1204 Old Stickney Point Rd, Sarasota, FL 34242",
+    "city": "Sarasota",
+    "city_raw": "sarasota",
+    "phone": "(941) 349-3885",
+    "about": "\"Longest running, legendary karaoke show on Siesta Key.\" Tue & Thu 6pm-10pm at Sniki Tiki main stage; Saturday 9:30pm Late Night Karaoke in the Back Room.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "06:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Thursday, Tuesday",
+    "karaoke_start_time": "06:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/sarasota/venues/captain-curt-s-sniki-tiki-bar-live-entertainment-siesta-key",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Raffurty's Bar and Grill",
+    "address": "1888 Main St, Sarasota, FL 34236",
+    "city": "Sarasota",
+    "city_raw": "sarasota",
+    "phone": "(941) 260-5285",
+    "about": "Karaoke Friday and Saturday at 9:30 PM, Sunday at 9 PM.",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Sunday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/sarasota/venues/raffurty-s-bar-and-grill",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Rendezvous Lounge",
+    "address": "1570 N Lockwood Ridge Rd, Sarasota, FL 34237",
+    "city": "Sarasota",
+    "city_raw": "sarasota",
+    "phone": "(941) 953-6970",
+    "about": "Karaoke four nights a week from 10 PM - 2 AM. Hosted by @DJSpidey on Tuesday and Saturday nights. Thursday features bucket specials.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "10:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday",
+    "karaoke_start_time": "10:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/sarasota/venues/rendezvous-lounge",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "CJ's Backstage - Full Liquor Bar/Restaurant offering great food & entertainmentSt. Petersburg",
+    "address": "7022 22nd Ave N, St. Petersburg, FL 33710",
+    "city": "St Petersburg",
+    "city_raw": "st petersburg",
+    "phone": "",
+    "about": "Karaoke multiple nights a week. Monday at 9:30 PM, Tuesday-Wednesday at 9 PM, Thursday at 10 PM. Voted Best of the Bay for Entertainment, Karaoke & Food.\n7022 22nd Ave N, St. Petersburg, FL 33710",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/st-petersburg/venues/cj-s-backstage-full-liquor-bar-restaurant-offering-great-food-entertainment",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "LALA St. PeteSt. Petersburg",
+    "address": "2324 Central Ave, St. Petersburg, FL 33712",
+    "city": "St Petersburg",
+    "city_raw": "st petersburg",
+    "phone": "(727) 334-2450",
+    "about": "Private karaoke rooms available daily. Seven uniquely themed rooms including Studio LALA (70s disco, up to 14), Rock and Red (grunge, up to 14), Tropical (up to 18), Speakeasy (up to 12), Recording Studio (soundproof, up to 8), and Grammys (up to 10). Full restaurant and rooftop bar. Open Mon-Thu 11am-12am, Fri-Sat 11am-2am, Sun 11am-12am.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "11:00 AM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "11:00 AM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "11:00 AM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "11:00 AM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "11:00 AM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "11:00 AM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "11:00 AM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "11:00 AM",
+    "karaoke_end_time": "",
+    "detail_url": "/st-petersburg/venues/lala-st-pete",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "BIRD\u2019s",
+    "address": "325 N Bronough St, Tallahassee, FL 32301",
+    "city": "Tallahassee",
+    "city_raw": "tallahassee",
+    "phone": "(850) 222-1075",
+    "about": "Karaoke every Thursday at 9:30 PM.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Thursday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tallahassee/venues/bird-s",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Bullwinkle's Saloon",
+    "address": "620 W Tennessee St, Tallahassee, FL 32304",
+    "city": "Tallahassee",
+    "city_raw": "tallahassee",
+    "phone": "(850) 224-0651",
+    "about": "Karaoke on Monday nights with no cover, starting at 8 PM. FSU-adjacent saloon since 1979.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tallahassee/venues/bullwinkle-s-saloon",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Fire Betty's",
+    "address": "1122 Thomasville Rd STE 1, Tallahassee, FL 32303",
+    "city": "Tallahassee",
+    "city_raw": "tallahassee",
+    "phone": "",
+    "about": "Karaoke every Wednesday at 9pm. 21+ venue, no cover charge.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tallahassee/venues/fire-betty-s",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Pockets Pool and Pub",
+    "address": "2810 Sharer Rd UNIT 7, Tallahassee, FL 32312",
+    "city": "Tallahassee",
+    "city_raw": "tallahassee",
+    "phone": "(850) 385-7665",
+    "about": "Karaoke on Tuesday and Thursday nights at this pool hall featuring 24 pool tables, darts, and mini-bowling.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Thursday, Tuesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tallahassee/venues/pockets-pool-and-pub",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "The Brass Tap",
+    "address": "1321 Thomasville Rd Unit E, Tallahassee, FL 32303",
+    "city": "Tallahassee",
+    "city_raw": "tallahassee",
+    "phone": "(850) 320-6300",
+    "about": "Karaoke Thursdays 9pm-1am hosted by @DjRah.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Thursday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tallahassee/venues/the-brass-tap-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "The Sound Bar",
+    "address": "1105 W Tharpe St, Tallahassee, FL 32303",
+    "city": "Tallahassee",
+    "city_raw": "tallahassee",
+    "phone": "(850) 320-2859",
+    "about": "Weekly Tuesday karaoke at 8PM hosted by @Nathan.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Tuesday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tallahassee/venues/the-sound-bar",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Double Decker Karaoke Party Bar",
+    "address": "1721 E 7th Ave, Tampa, FL 33605",
+    "city": "Tampa",
+    "city_raw": "tampa",
+    "phone": "(813) 248-2099",
+    "about": "Karaoke every night of the week in Ybor City Historic District. Open until 3 AM.",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "06:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "06:30 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "06:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Sunday, Tuesday, Wednesday",
+    "karaoke_start_time": "06:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tampa/venues/double-decker-karaoke-party-bar-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "GANGCHU",
+    "address": "6618 N Nebraska Ave, Tampa, FL 33604",
+    "city": "Tampa",
+    "city_raw": "tampa",
+    "phone": "(813) 232-4238",
+    "about": "Private karaoke room available during restaurant hours. $10 per person per hour, up to 12 guests. Features the Singa Karaoke system with one of the largest licensed karaoke song catalogs in Tampa Bay, multiple HD flat screens, state-of-the-art sound system and light show.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "05:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tampa/venues/gangchu",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Pete's Place South",
+    "address": "4145 Henderson Blvd, Tampa, FL 33629",
+    "city": "Tampa",
+    "city_raw": "tampa",
+    "phone": "(813) 282-9039",
+    "about": "Karaoke Thursday through Sunday starting at 9pm. Open daily 11am-3am.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tampa/venues/pete-s-place-south",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Tampa Karaoke VIP Bar and Lounge",
+    "address": "930 E Fletcher Ave, Tampa, FL 33612",
+    "city": "Tampa",
+    "city_raw": "tampa",
+    "phone": "(813) 513-3028",
+    "about": "Dedicated karaoke venue (TK Lounge) with private karaoke rooms featuring iPads, YouTube song search, and 2 mics per room. Open Tue-Thu & Sun 8 PM - 2 AM, Fri-Sat 8 PM - 3 AM. Closed Mondays.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tampa/venues/tampa-karaoke-vip-bar-and-lounge-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "ThunderBay Bar & Grill",
+    "address": "4901 W Linebaugh Ave # 9, Tampa, FL 33624",
+    "city": "Tampa",
+    "city_raw": "tampa",
+    "phone": "(813) 373-6334",
+    "about": "Karaoke & DJ Dance Party Wed-Thu 9 PM - midnight, Fri 9 PM - close.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Thursday, Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tampa/venues/thunderbay-bar-grill-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Gaspar's Patio Bar & Grille",
+    "address": "8448 N 56th St, Temple Terrace, FL 33617",
+    "city": "Temple Terrace",
+    "city_raw": "temple terrace",
+    "phone": "(813) 988-6959",
+    "about": "Karaoke 7 nights a week starting at 9 PM.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Tuesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Sunday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Monday, Saturday, Sunday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/temple-terrace/venues/gaspar-s-patio-bar-grille-2",
+    "source": "findkaraoke.net"
+  },
+  {
+    "venue_name": "Lost Weekend WPB",
+    "address": "526 Clematis St, West Palm Beach, FL 33401",
+    "city": "West Palm Beach",
+    "city_raw": "west palm beach",
+    "phone": "(561) 293-2786",
+    "about": "Monday Industry Night + Karaoke from 9:30 PM to 2:00 AM hosted by @Sho' Nuff Entertainment. 40% off drinks 7 PM to close. All vibes welcome, no judgment.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "09:30 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday",
+    "karaoke_start_time": "09:30 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/west-palm-beach/venues/lost-weekend-wpb",
+    "source": "findkaraoke.net"
+  }
+]

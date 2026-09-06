@@ -1,0 +1,822 @@
+[
+  {
+    "name": "The Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "172 Giralda Ave",
+      "addressLocality": "Coral Gables",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 442-2730",
+    "url": "http://www.gablesthebar.com/",
+    "description": "Neighborhood spot for burgers & wings, board games, karaoke & DJs, plus weekend live music.",
+    "rating": 4.3,
+    "review_count": 857
+  },
+  {
+    "name": "Fireside Lounge and Billiards",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "43356 US-27",
+      "addressLocality": "Davenport",
+      "addressRegion": "Florida"
+    },
+    "phone": "(863) 420-0100",
+    "url": "https://www.facebook.com/share/1Afs7ba9P3/?mibextid=wwXIfr",
+    "description": "",
+    "rating": 4.5,
+    "review_count": 281
+  },
+  {
+    "name": "Paddywagon Irish Pub Davenport",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "201 Ambersweet Wy",
+      "addressLocality": "Davenport",
+      "addressRegion": "Florida"
+    },
+    "phone": "(863) 420-7446",
+    "url": "https://www.paddywagonirishpub.com/locations/paddywagon-irish-pub/davenport",
+    "description": "Casual chain Irish pub offering draft beer & lots of TVs as well as pool, karaoke & poker nights.",
+    "rating": 4.5,
+    "review_count": 428
+  },
+  {
+    "name": "Elbo Room",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "241 S Fort Lauderdale Beach Blvd",
+      "addressLocality": "Fort Lauderdale",
+      "addressRegion": "Florida"
+    },
+    "phone": "(954) 463-4615",
+    "url": "http://www.elboroom.com/",
+    "description": "Long-running beach bar with live bands & DJ dancing, luring perennial spring-breakers.",
+    "rating": 4.3,
+    "review_count": 3455
+  },
+  {
+    "name": "Oasis Pub",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "3224 W Commercial Blvd",
+      "addressLocality": "Fort Lauderdale",
+      "addressRegion": "Florida"
+    },
+    "phone": "(954) 733-6688",
+    "url": "",
+    "description": "",
+    "rating": 4.2,
+    "review_count": 235
+  },
+  {
+    "name": "Boston Johnny's",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "2120 N Dixie Hwy",
+      "addressLocality": "Hollywood",
+      "addressRegion": "Florida"
+    },
+    "phone": "(954) 923-7650",
+    "url": "https://boston-johnnys.com/",
+    "description": "",
+    "rating": 4.4,
+    "review_count": 389
+  },
+  {
+    "name": "Wave Restaurant, Bar and Lounge",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "115 S 20th Ave",
+      "addressLocality": "Hollywood",
+      "addressRegion": "Florida"
+    },
+    "phone": "(954) 367-5644",
+    "url": "",
+    "description": "",
+    "rating": 4.1,
+    "review_count": 261
+  },
+  {
+    "name": "Cloud 9 Bar and Grill",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "7126 Stirling Rd",
+      "addressLocality": "Hollywood",
+      "addressRegion": "Florida"
+    },
+    "phone": "(954) 499-3525",
+    "url": "",
+    "description": "Understated nightspot offering DJ nights, drink specials & entertainment.",
+    "rating": 4.2,
+    "review_count": 416
+  },
+  {
+    "name": "B leaf karaoke lounge & smokeshop",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1808 S Young Cir",
+      "addressLocality": "Hollywood",
+      "addressRegion": "Florida"
+    },
+    "phone": "(786) 956-0102",
+    "url": "https://bleafkaraoke.com/",
+    "description": "",
+    "rating": 4.6,
+    "review_count": 83
+  },
+  {
+    "name": "Austin Karaoke",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "5161 Beach Blvd #4",
+      "addressLocality": "Jacksonville",
+      "addressRegion": "Florida"
+    },
+    "phone": "(904) 789-2395",
+    "url": "https://www.facebook.com/profile.php?id=61554797212031",
+    "description": "",
+    "rating": 4.3,
+    "review_count": 212
+  },
+  {
+    "name": "Mc B's Lounge",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "6217 St Augustine Rd",
+      "addressLocality": "Jacksonville",
+      "addressRegion": "Florida"
+    },
+    "phone": "(904) 731-1355",
+    "url": "",
+    "description": "",
+    "rating": 4.4,
+    "review_count": 399
+  },
+  {
+    "name": "Maharlika Karaoke Bar & Grill",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "14255-E, Beach Blvd",
+      "addressLocality": "Jacksonville",
+      "addressRegion": "Florida"
+    },
+    "phone": "(904) 992-1112",
+    "url": "",
+    "description": "Cavernous, lively Filipino joint offering classic cuisine & cocktails, plus music events & karaoke.",
+    "rating": 4,
+    "review_count": 477
+  },
+  {
+    "name": "Bobby's Monkey Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "900 Simonton St",
+      "addressLocality": "Key West",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 294-2655",
+    "url": "",
+    "description": "",
+    "rating": 4.5,
+    "review_count": 448
+  },
+  {
+    "name": "RockHouse Live Key West",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "135 Duval St",
+      "addressLocality": "Key West",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 440-3263",
+    "url": "http://www.facebook.com/rockhouselivekeywest",
+    "description": "",
+    "rating": 4.5,
+    "review_count": 159
+  },
+  {
+    "name": "Rick's Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "202 Duval St",
+      "addressLocality": "Key West",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 296-4890",
+    "url": "http://www.ricksbarkeywest.com/",
+    "description": "Happening nightspot complex with themed areas ranging from a lounge to a dance club to live music.",
+    "rating": 4.3,
+    "review_count": 1311
+  },
+  {
+    "name": "618 Duval Stars Karaoke",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "618 Duval St",
+      "addressLocality": "Key West",
+      "addressRegion": "Florida"
+    },
+    "phone": "",
+    "url": "",
+    "description": "",
+    "rating": 4.5,
+    "review_count": 54
+  },
+  {
+    "name": "Se7aS Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "2200 SW 57th Ave",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 266-6071",
+    "url": "https://m.facebook.com/sevenseasbar?refsrc=https://www.facebook.com/sevenseasbar",
+    "description": "Rustic, old-timey hangout with nautical accents & a pool table offering cocktails, beer & karaoke.",
+    "rating": 4.4,
+    "review_count": 407
+  },
+  {
+    "name": "Karaoke en Miami",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "2901 NW 7th St",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 771-4820",
+    "url": "http://www.karaokeinmiami.com/",
+    "description": "",
+    "rating": 4.9,
+    "review_count": 10
+  },
+  {
+    "name": "Better Days",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "75 SE 6th St",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 200-5039",
+    "url": "http://www.betterdays305.com/",
+    "description": "Laid-back cocktail bar inside a thrift shop featuring craft cocktails, beer & wine, plus games.",
+    "rating": 4.3,
+    "review_count": 966
+  },
+  {
+    "name": "Sweet Caroline Karaoke Bar - Wynwood",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "2445 N Miami Ave",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 990-8305",
+    "url": "https://www.sweetcarolinebar.com/",
+    "description": "Sweet Caroline Wynwood is a vibrant karaoke venue that offers an energetic and welcoming atmosphere, perfect for singing enthusiasts and casual guests alike. Known for its great sound system, extensive song selection, and friendly staff, it provides a fun environment for nights out. The venue serves tasty cocktails and maintains high standards of cleanliness, making it an ideal spot for both locals and visitors to enjoy karaoke at any time.",
+    "rating": 5,
+    "review_count": 13
+  },
+  {
+    "name": "Miami Sound Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "123 SE 2nd Ave",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(786) 809-0900",
+    "url": "http://miamisound.bar/",
+    "description": "",
+    "rating": 4.1,
+    "review_count": 169
+  },
+  {
+    "name": "Over Under",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "151 E Flagler St",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(786) 247-9851",
+    "url": "http://overundermiami.com/",
+    "description": "Hip, brick-lined bar serving cocktails & brunch, plus generous plates of hearty pub fare.",
+    "rating": 4.3,
+    "review_count": 316
+  },
+  {
+    "name": "Karaoke Room - Lounge style",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "7580 NE 4th Ct",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 497-0993",
+    "url": "https://www.miamiironside.com/the-lounge",
+    "description": "",
+    "rating": 5,
+    "review_count": 2
+  },
+  {
+    "name": "#PELULLIO",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1001 SW 100th Ct",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(786) 426-6665",
+    "url": "https://www.karaoke-dj-miami.com/",
+    "description": "",
+    "rating": 5,
+    "review_count": 39
+  },
+  {
+    "name": "Thank You Miami Cocina & Beer House",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1701 W Flagler St #101",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 342-1208",
+    "url": "http://www.thankyoumiami.com/",
+    "description": "",
+    "rating": 4.9,
+    "review_count": 603
+  },
+  {
+    "name": "RedBar Brickell",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "52 SW 10th St",
+      "addressLocality": "Miami",
+      "addressRegion": "Florida"
+    },
+    "phone": "(786) 316-0302",
+    "url": "https://www.redbarbrickell.com/",
+    "description": "Chill art-adorned hangout with couches for drinks & events, from art-show openings to DJ nights.",
+    "rating": 4.3,
+    "review_count": 615
+  },
+  {
+    "name": "Sweet Caroline Karaoke Bar - Brickell",
+    "address": "1111 SW 1st Ave #107",
+    "city": "Miami",
+    "phone": "(786) 673-2522",
+    "url": "http://sweetcarolinebar.com/",
+    "description": "Energetic hangout with a full bar & a singalong song library containing 300,000+ titles.",
+    "rating": 4.4,
+    "review_count": 750
+  },
+  {
+    "name": "Evolusion Karaoke and DJ Services",
+    "address": "4642 SW 74th Ave",
+    "city": "Miami",
+    "phone": "(305) 600-4323",
+    "url": "http://www.evolusionkaraoke.com/",
+    "description": "",
+    "rating": 5,
+    "review_count": 16
+  },
+  {
+    "name": "Private Events Only: Florida Fine - Photo, Video, DJ, Karaoke - Miami",
+    "address": "1000 Brickell Ave Ste 715",
+    "city": "Miami",
+    "phone": "(561) 221-3538",
+    "url": "",
+    "description": "",
+    "rating": 5,
+    "review_count": 8
+  },
+  {
+    "name": "Tipsy Flamingo Cocktail Bar",
+    "address": "40 NE 1st Ave #101",
+    "city": "Miami",
+    "phone": "(305) 646-9967",
+    "url": "http://tipsyflamingomiami.com/",
+    "description": "",
+    "rating": 4.5,
+    "review_count": 351
+  },
+  {
+    "name": "Bar Gaythering",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1409 Lincoln Rd F1",
+      "addressLocality": "Miami Beach",
+      "addressRegion": "Florida"
+    },
+    "phone": "(786) 284-1176",
+    "url": "https://www.gaythering.com/bar.html",
+    "description": "Creative drinks in a hotel space with games, lounge & high top seating & eclectic interior details.",
+    "rating": 4.5,
+    "review_count": 115
+  },
+  {
+    "name": "Kill Your Idol",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "222 Espa\u00f1ola Wy",
+      "addressLocality": "Miami Beach",
+      "addressRegion": "Florida"
+    },
+    "phone": "",
+    "url": "https://www.instagram.com/kyimiami/",
+    "description": "A life-size Bruce Lee statue is the focal point of this bar with DJs & live music.",
+    "rating": 4.5,
+    "review_count": 787
+  },
+  {
+    "name": "Mickey Burkes",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1265 Washington Ave",
+      "addressLocality": "Miami Beach",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 747-7505",
+    "url": "https://mickeyburkes.com/",
+    "description": "",
+    "rating": 4.8,
+    "review_count": 1729
+  },
+  {
+    "name": "Palace Bar & Restaurant",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1052 Ocean Dr",
+      "addressLocality": "Miami Beach",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 531-7234",
+    "url": "http://www.palacesouthbeach.com/?y_source=1_MTAwNDg3Njc1NS03MTUtbG9jYXRpb24ud2Vic2l0ZQ%3D%3D",
+    "description": "Long-running gay fixture known for weekend drag shows, plus all-day breakfast & bar-food menu.",
+    "rating": 4.5,
+    "review_count": 4444
+  },
+  {
+    "name": "Bolivar Colombian Restaurant Bar Lounge",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "841 Washington Ave",
+      "addressLocality": "Miami Beach",
+      "addressRegion": "Florida"
+    },
+    "phone": "(786) 702-3681",
+    "url": "http://www.bolivarmiamibeach.com/",
+    "description": "Stylish destination offering Colombian twists on South American recipes & a festive atmosphere.",
+    "rating": 4.5,
+    "review_count": 2513
+  },
+  {
+    "name": "Mango's - Miami",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "900 Ocean Dr",
+      "addressLocality": "Miami Beach",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 673-4422",
+    "url": "https://miami.mangos.com/",
+    "description": "Restaurant/nightclub with cocktails, live Latin music & entertainment until 5 AM.",
+    "rating": 4.6,
+    "review_count": 11010
+  },
+  {
+    "name": "Lost Weekend",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "218 Espa\u00f1ola Wy",
+      "addressLocality": "Miami Beach",
+      "addressRegion": "Florida"
+    },
+    "phone": "(305) 672-1707",
+    "url": "https://www.sub-culture.org/locations/lost-weekend-miami/",
+    "description": "Simple watering hole with billiards, games, TV sports & theme nights, plus a small menu of pub grub.",
+    "rating": 4.3,
+    "review_count": 1276
+  },
+  {
+    "name": "Nakama Anime Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1540 Wells Rd ste 12",
+      "addressLocality": "Orange Park",
+      "addressRegion": "Florida"
+    },
+    "phone": "(904) 644-8967",
+    "url": "http://nakamabar.com/",
+    "description": "",
+    "rating": 4.6,
+    "review_count": 492
+  },
+  {
+    "name": "Fifty Seven Heaven",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1975 Wells Rd",
+      "addressLocality": "Orange Park",
+      "addressRegion": "Florida"
+    },
+    "phone": "(904) 276-5071",
+    "url": "",
+    "description": "",
+    "rating": 4.2,
+    "review_count": 121
+  },
+  {
+    "name": "Q Karaoke",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "4519 S Orange Blossom Trl",
+      "addressLocality": "Orlando",
+      "addressRegion": "Florida"
+    },
+    "phone": "(407) 476-8280",
+    "url": "http://www.q-karaoke.com/",
+    "description": "This modern billiard lounge & bar serves Japanese-Korean eats & rents karaoke rooms by the hour.",
+    "rating": 4.5,
+    "review_count": 391
+  },
+  {
+    "name": "O'Shucks Karaoke Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "7467 International Dr",
+      "addressLocality": "Orlando",
+      "addressRegion": "Florida"
+    },
+    "phone": "(407) 352-7892",
+    "url": "http://oshuckspub.com/",
+    "description": "Genial, dark-wood Irish pub offering standard bar bites, pool tables, an arcade & nightly karaoke.",
+    "rating": 4.4,
+    "review_count": 1489
+  },
+  {
+    "name": "CityWalk's Rising Star",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "6000 Universal Blvd",
+      "addressLocality": "Orlando",
+      "addressRegion": "Florida"
+    },
+    "phone": "(407) 224-2961",
+    "url": "https://www.universalorlando.com/web/en/us/things-to-do/entertainment/rising-star-karaoke",
+    "description": "Venue where patrons belt out karaoke on stage with a live band in front of a real audience.",
+    "rating": 4.3,
+    "review_count": 1150
+  },
+  {
+    "name": "Big Daddy's Orlando",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "3001 Corrine Dr",
+      "addressLocality": "Orlando",
+      "addressRegion": "Florida"
+    },
+    "phone": "(407) 644-2844",
+    "url": "http://bigdaddysorlando.com/",
+    "description": "Upbeat hangout offering TV sports, daily karaoke & happy-hour deals, plus pool, darts & a patio.",
+    "rating": 4.3,
+    "review_count": 745
+  },
+  {
+    "name": "The Voice Of Orlando",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "521 N Kirkman Rd suit201-b",
+      "addressLocality": "Orlando",
+      "addressRegion": "Florida"
+    },
+    "phone": "(407) 666-9929",
+    "url": "https://www.thevoiceoforlando.net/",
+    "description": "",
+    "rating": 3.1,
+    "review_count": 27
+  },
+  {
+    "name": "Jerry's Pub",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "5825 S Orange Ave",
+      "addressLocality": "Orlando",
+      "addressRegion": "Florida"
+    },
+    "phone": "(407) 858-9096",
+    "url": "",
+    "description": "",
+    "rating": 4.6,
+    "review_count": 142
+  },
+  {
+    "name": "Caf\u00e9 Karaoke",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "5052 W Colonial Dr",
+      "addressLocality": "Orlando",
+      "addressRegion": "Florida"
+    },
+    "phone": "(254) 413-3219",
+    "url": "",
+    "description": "",
+    "rating": 4.6,
+    "review_count": 10
+  },
+  {
+    "name": "KTV Orlando",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "7130 S Orange Blossom Trl",
+      "addressLocality": "Orlando",
+      "addressRegion": "Florida"
+    },
+    "phone": "(407) 856-9997",
+    "url": "http://www.ktvorlando.com/",
+    "description": "Buzzy karaoke haunt featuring billiards, wine, sake & beer, plus hourly rates for private rooms.",
+    "rating": 4.6,
+    "review_count": 360
+  },
+  {
+    "name": "Kitty O'Shea's Irish Pub and Buffalo Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "8470 Palm Pkwy",
+      "addressLocality": "Orlando",
+      "addressRegion": "Florida"
+    },
+    "phone": "(407) 238-9769",
+    "url": "http://kittyosheaspub.com/",
+    "description": "This festive pub offers basic bar fare, karaoke, daily food & drink specials & a game room.",
+    "rating": 4.4,
+    "review_count": 1296
+  },
+  {
+    "name": "Pete's Place South",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "4145 Henderson Blvd",
+      "addressLocality": "Tampa",
+      "addressRegion": "Florida"
+    },
+    "phone": "(813) 282-9039",
+    "url": "http://petesplacesouth.com/",
+    "description": "Bar & grill offering seafood & Southern fare, plus karaoke, pool tables & patio seating.",
+    "rating": 4.4,
+    "review_count": 592
+  },
+  {
+    "name": "Crypto Karaoke Bar by Upscale Inc",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "3030 N Rocky Point Dr Suite 150",
+      "addressLocality": "Tampa",
+      "addressRegion": "Florida"
+    },
+    "phone": "",
+    "url": "https://cryptokaraoke.live/",
+    "description": "",
+    "rating": 5,
+    "review_count": 2
+  },
+  {
+    "name": "The Grand Karaoke Lounge",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1104 E Fowler Ave #102",
+      "addressLocality": "Tampa",
+      "addressRegion": "Florida"
+    },
+    "phone": "(813) 502-0137",
+    "url": "http://grandfortunefl.com/",
+    "description": "",
+    "rating": 4,
+    "review_count": 13
+  },
+  {
+    "name": "Tampa Karaoke VIP Bar and Lounge",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "930 E Fletcher Ave",
+      "addressLocality": "Tampa",
+      "addressRegion": "Florida"
+    },
+    "phone": "(813) 513-3028",
+    "url": "http://www.tampakvip.com/",
+    "description": "Energetic singing & cocktail lounge with  private rooms, a buzzy public bar area & late hours.",
+    "rating": 4.2,
+    "review_count": 698
+  },
+  {
+    "name": "My Karaoke Guy LLC",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "425 S 50th St",
+      "addressLocality": "Tampa",
+      "addressRegion": "Florida"
+    },
+    "phone": "(813) 361-9196",
+    "url": "https://www.mykaraokeguy.org/",
+    "description": "",
+    "rating": 5,
+    "review_count": 50
+  },
+  {
+    "name": "Double Decker Karaoke Party Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "1721 E 7th Ave",
+      "addressLocality": "Tampa",
+      "addressRegion": "Florida"
+    },
+    "phone": "(813) 248-2099",
+    "url": "http://doubledeckertampa.com/",
+    "description": "Casual, upbeat haunt featuring karaoke & event nights, plus a wide beer selection & an outside bar.",
+    "rating": 4,
+    "review_count": 743
+  },
+  {
+    "name": "Jerry's Crystal Bar",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "5707 Gall Blvd",
+      "addressLocality": "Zephyrhills",
+      "addressRegion": "Florida"
+    },
+    "phone": "(813) 715-2004",
+    "url": "http://www.jerryscrystalbar.com/",
+    "description": "",
+    "rating": 4.2,
+    "review_count": 582
+  },
+  {
+    "name": "Pat's Place",
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "US",
+      "streetAddress": "37640 FL-54",
+      "addressLocality": "Zephyrhills",
+      "addressRegion": "Florida"
+    },
+    "phone": "(813) 783-3147",
+    "url": "",
+    "description": "",
+    "rating": 4.2,
+    "review_count": 279
+  }
+]

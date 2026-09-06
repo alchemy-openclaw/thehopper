@@ -1,0 +1,208 @@
+[
+  {
+    "venue_name": "MAJOR'S DIVE BAR",
+    "address": "1403 Boynton Beach Blvd, Boynton Beach, FL 33426",
+    "city": "Boynton Beach",
+    "city_raw": "boynton beach",
+    "phone": "",
+    "about": "Karaoke every Monday and Thursday from 8pm to midnight (and later if the party keeps going). Hosted by @Kyle Luster with @The Pinkerton Agency. Free admission.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday, Thursday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/boynton-beach/venues/major-s-dive-bar",
+    "source": "findkaraoke.net",
+    "matched_license_id": null,
+    "match_score": 0.557
+  },
+  {
+    "venue_name": "Dirty Harry's Pub & Package",
+    "address": "705 Main St Bridge, Daytona Beach, FL 32118",
+    "city": "Daytona Beach",
+    "city_raw": "daytona beach",
+    "phone": "(386) 243-5304",
+    "about": "Karaoke/DJ night Friday and Saturday 9pm to close hosted by @DJSkratch.",
+    "schedule": [
+      {
+        "day": "Friday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/daytona-beach/venues/dirty-harry-s-pub-package-2",
+    "source": "findkaraoke.net",
+    "matched_license_id": null,
+    "match_score": 0.571
+  },
+  {
+    "venue_name": "Just 1 More Rooster",
+    "address": "1382 Howland Blvd, Deltona, FL 32738",
+    "city": "Deltona",
+    "city_raw": "deltona",
+    "phone": "(386) 860-0035",
+    "about": "Monday night karaoke hosted by @Sickman.",
+    "schedule": [
+      {
+        "day": "Monday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Monday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/deltona/venues/just-1-more-rooster",
+    "source": "findkaraoke.net",
+    "matched_license_id": null,
+    "match_score": 0.586
+  },
+  {
+    "venue_name": "9 Feet Under",
+    "address": "885 SE 14th St Side Entrance, Hialeah, FL 33010",
+    "city": "Hialeah",
+    "city_raw": "hialeah",
+    "phone": "(305) 414-6950",
+    "about": "Karaoke Night every Thursday 9PM-12AM. Speakeasy-style venue with craft cocktails.",
+    "schedule": [
+      {
+        "day": "Thursday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Thursday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/hialeah/venues/9-feet-under",
+    "source": "findkaraoke.net",
+    "matched_license_id": null,
+    "match_score": 0.48
+  },
+  {
+    "venue_name": "Harold's Place Chickee Bar And Grill",
+    "address": "2555 Tamiami Trl N, Naples, FL 34103",
+    "city": "Naples",
+    "city_raw": "naples",
+    "phone": "(239) 263-7254",
+    "about": "Karaoke every Sunday from 2-6pm",
+    "schedule": [
+      {
+        "day": "Sunday",
+        "start_time": "02:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Sunday",
+    "karaoke_start_time": "02:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/naples/venues/harold-s-place-chickee-bar-and-grill",
+    "source": "findkaraoke.net",
+    "matched_license_id": null,
+    "match_score": 0.553
+  },
+  {
+    "venue_name": "Good Fortune St. Pete",
+    "address": "260 1st Ave S #100, St. Petersburg, FL 33701",
+    "city": "Saint Petersburg",
+    "city_raw": "saint petersburg",
+    "phone": "(727) 287-3881",
+    "about": "Private karaoke rooms open Tuesday - Sunday at 5 PM. Asian fusion restaurant in Station House downtown. Reservation-based. No food in karaoke rooms. 21+ after 9 PM Fri/Sat.\n260 1st Ave S #100, St. Petersburg, FL 33701",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Wednesday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Thursday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Friday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      },
+      {
+        "day": "Saturday",
+        "start_time": "05:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Friday, Saturday, Thursday, Tuesday, Wednesday",
+    "karaoke_start_time": "05:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/saint-petersburg/venues/good-fortune-st-pete-2",
+    "source": "findkaraoke.net",
+    "matched_license_id": null,
+    "match_score": 0.5
+  },
+  {
+    "venue_name": "Fire Betty's",
+    "address": "1122 Thomasville Rd STE 1, Tallahassee, FL 32303",
+    "city": "Tallahassee",
+    "city_raw": "tallahassee",
+    "phone": "",
+    "about": "Karaoke every Wednesday at 9pm. 21+ venue, no cover charge.",
+    "schedule": [
+      {
+        "day": "Wednesday",
+        "start_time": "09:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Wednesday",
+    "karaoke_start_time": "09:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tallahassee/venues/fire-betty-s",
+    "source": "findkaraoke.net",
+    "matched_license_id": null,
+    "match_score": 0.522
+  },
+  {
+    "venue_name": "The Sound Bar",
+    "address": "1105 W Tharpe St, Tallahassee, FL 32303",
+    "city": "Tallahassee",
+    "city_raw": "tallahassee",
+    "phone": "(850) 320-2859",
+    "about": "Weekly Tuesday karaoke at 8PM hosted by @Nathan.",
+    "schedule": [
+      {
+        "day": "Tuesday",
+        "start_time": "08:00 PM",
+        "end_time": ""
+      }
+    ],
+    "karaoke_nights": "Tuesday",
+    "karaoke_start_time": "08:00 PM",
+    "karaoke_end_time": "",
+    "detail_url": "/tallahassee/venues/the-sound-bar",
+    "source": "findkaraoke.net",
+    "matched_license_id": null,
+    "match_score": 0.567
+  }
+]
