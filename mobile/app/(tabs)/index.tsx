@@ -35,11 +35,13 @@ type Filter =
 
 /** Radius options for the near-me search, in miles. */
 const RADIUS_OPTIONS = [10, 20, 30, 40, 50];
-const DEFAULT_RADIUS_MILES = 25;
+const DEFAULT_RADIUS_MILES = 20;
 
 export default function VenuesScreen() {
   const [venues, setVenues] = useState<Venue[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Nothing loads until the singer searches — the unfiltered national list is
+  // exactly what a scraper wants, so it is never the default view.
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [city, setCity] = useState('');
   const [filter, setFilter] = useState<Filter>({ kind: 'all' });
@@ -82,7 +84,6 @@ export default function VenuesScreen() {
   };
 
   useEffect(() => {
-    loadVenues();
     api.getConfig().then(setConfig).catch(() => setConfig(null));
   }, []);
 
@@ -116,19 +117,20 @@ export default function VenuesScreen() {
 
   const handleCitySearch = () => {
     const trimmed = city.trim();
-    if (!trimmed) {
-      handleShowAll();
-      return;
-    }
+    // An empty city box is a no-op now — there is no "show everything" view
+    // to fall back to, by design.
+    if (!trimmed) return;
     setFilter({ kind: 'city', city: trimmed });
     loadVenues(undefined, undefined, trimmed);
   };
 
-  /** Return to the unfiltered list — the way back from a location or city search. */
-  const handleShowAll = () => {
+  /** Leaving a city/near search returns to the landing state — an empty list,
+      not the national dump. */
+  const handleReset = () => {
     setCity('');
     setFilter({ kind: 'all' });
-    loadVenues();
+    setVenues([]);
+    setError(null);
   };
 
   const handleSelectVenue = (venue: Venue) => {
@@ -222,9 +224,9 @@ export default function VenuesScreen() {
           <View style={styles.filterRow}>
             <Text style={styles.filterText}>{filterLabel}</Text>
             <Button
-              label="Show all"
+              label="Clear search"
               variant="secondary"
-              onPress={handleShowAll}
+              onPress={handleReset}
               style={styles.clearBtn}
             />
           </View>
@@ -264,6 +266,13 @@ export default function VenuesScreen() {
 
       {loading ? (
         <Loading label="Finding karaoke…" />
+      ) : filter.kind === 'all' ? (
+        // Landing state: nothing searched yet. Never an unfiltered national
+        // list — that view is a scrape giveaway and useless to a singer.
+        <EmptyState
+          icon="🎤"
+          message="Tap “Find karaoke near me”, or search by city, to see what's on."
+        />
       ) : visibleVenues.length === 0 ? (
         <View>
           <EmptyState
@@ -283,9 +292,7 @@ export default function VenuesScreen() {
           {otherNightCount > 0 && (
             <Button label="Show any night" onPress={() => setSoonOnly(false)} />
           )}
-          {filter.kind !== 'all' && (
-            <Button label="← Back to all venues" onPress={handleShowAll} />
-          )}
+          <Button label="← Back" onPress={handleReset} />
         </View>
       ) : (
         visibleVenues.map((v) => (
@@ -395,11 +402,13 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   radiusBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     minHeight: TAP_HEIGHT,
     minWidth: 96,
     paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.bg2,
