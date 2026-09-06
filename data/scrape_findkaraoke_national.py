@@ -11,6 +11,7 @@ this version generalizes state handling beyond ", FL".
 Output: data/findkaraoke_national.json
 """
 
+import html as html_mod
 import json
 import re
 import sys
@@ -111,17 +112,38 @@ def parse_schedule(text: str) -> list[dict]:
 
 # --- venue detail parsing (regex on text; no bs4 dependency) ----------------
 
-def extract_venue_name(html: str, city_slug: str) -> str:
-    m = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.S)
+def extract_venue_name(page_html: str, city_slug: str) -> str:
+    """Parse the h1: 'Karaoke at' <span> / venue name <span> / 'City, ST' <span>.
+
+    The venue name is the middle span; the trailing span is the city echo.
+    Falls back to whole-h1 text with the city suffix stripped.
+    """
+    m = re.search(r"<h1[^>]*>(.*?)</h1>", page_html, re.S)
     if not m:
         return ""
-    text = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+    inner = m.group(1)
+    spans = re.findall(r"<span[^>]*>(.*?)</span>", inner, re.S)
+    cleaned = []
+    for s in spans:
+        t = html_mod.unescape(re.sub(r"<[^>]+>", " ", s))
+        t = re.sub(r"\s+", " ", t).strip()
+        if t:
+            cleaned.append(t)
+    # Expected: ['Karaoke at', '<venue>', 'City, ST'] — take the venue part.
+    if len(cleaned) >= 3:
+        return cleaned[1]
+    if len(cleaned) == 2 and cleaned[0].lower() == "karaoke at":
+        return cleaned[1]
+    # Fallback: whole h1, prefix/suffix stripped.
+    text = re.sub(r"<[^>]+>", " ", inner)
+    text = html_mod.unescape(text)
+    text = re.sub(r"\s+", " ", text).strip()
     name = re.sub(r"^Karaoke\s+at\s*", "", text, flags=re.I)
-    # strip trailing ", City, ST" or ", ST" — city title-cased from slug
     city_title = city_slug.replace("-", " ").title()
-    name = re.sub(rf",\s*{re.escape(city_title)},?\s*[A-Z]{{2}}\s*$", "", name)
-    name = re.sub(rf",\s*{re.escape(city_title)}\s*$", "", name)
-    name = re.sub(r",\s*[A-Z]{2}\s*$", "", name)
+    name = re.sub(rf"\s*[-,]?\s*{re.escape(city_title)},?\s*[A-Za-z]{{2}}\s*$", "", name)
+    name = re.sub(rf"\s*[-,]?\s*{re.escape(city_title)}\s*$", "", name)
+    name = re.sub(r"\s*[-,]\s*[A-Za-z]{{2}},?\s*[A-Za-z]{{2}}\s*$", "", name)
+    name = re.sub(r"\s*[-,]\s*[A-Za-z]{2},?\s*[A-Za-z]{2}\s*$", "", name)
     return name.strip()
 
 
@@ -161,20 +183,42 @@ def extract_schedule_text(html: str) -> str:
 
 # --- phases ------------------------------------------------------------------
 
-def phase_a_cities() -> list[str]:
-    """Fetch all city pages, return venue hrefs with city slugs."""
+def phase_a_cities() -> list[dict]:
+    """Fetch city pages + direct venue URLs from the sitemap.
+
+    The sitemap also contains /{city}/venues/{slug} detail pages (1,650 of
+    them) and day-combo pages ({city}/{day}) — neither should be treated as
+    a city. Venue detail URLs are added straight to the work queue so we skip
+    a fetch for those.
+    """
     xml = fetch("https://findkaraoke.net/sitemap.xml")
     locs = re.findall(r"<loc>([^<]+)</loc>", xml)
     from urllib.parse import urlparse
-    skip = ("blog/", "submissions/", "venue/")
+    skip_prefixes = ("blog/", "submissions/", "venue/")
     reserved = {"", "blog", "tonight", "stats", "cities", "private-karaoke-rooms",
                 "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
-    cities = []
+    days = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+
+    cities: list[str] = []
+    cities: list[str] = []
+    direct_venues: set[str] = set()
     for u in locs:
         p = urlparse(u).path.strip("/")
-        if p and not p.startswith(skip) and p not in reserved and "/venues/" not in p:
-            cities.append(p)
-    print(f"phase A: {len(cities)} city pages", flush=True)
+        if not p or p.startswith(skip_prefixes) or p in reserved:
+            continue
+        if "/venues/" in p:
+            # Direct venue detail URL: no city fetch needed.
+            direct_venues.add(p)
+            continue
+        seg = p.split("/")
+        # A city page is a single path segment — anything deeper is a
+        # day-combo or other sub-page that would poison the cache paths.
+        if len(seg) != 1:
+            continue
+        if seg[0] in days or seg[0] == "tonight":
+            continue
+        cities.append(p)
+    print(f"phase A: {len(cities)} city pages, {len(direct_venues)} direct venue URLs", flush=True)
 
     venue_links: dict[str, dict] = {}
     for i, city in enumerate(cities, 1):
@@ -196,26 +240,24 @@ def phase_a_cities() -> list[str]:
                 cf.write_text(json.dumps([]))
                 print(f"  [{i}] city ERR {city}: {e}", flush=True)
         for l in links:
-            venue_links.setdefault(l["key"], True)
-            if l["key"] not in [x for x in []]:
-                pass
-        if i % 500 == 0:
+            venue_links[l["key"]] = l
+        if i % 250 == 0:
             print(f"  {i}/{len(cities)} cities, {len(venue_links)} venues so far", flush=True)
         time.sleep(DELAY)
 
-    # reload all cached links (resumable runs)
-    all_links: list[dict] = []
-    seen: set[str] = set()
-    for cf in sorted(CITY_CACHE.glob("*.json")):
-        try:
-            for l in json.loads(cf.read_text()):
-                if l["key"] not in seen:
-                    seen.add(l["key"])
-                    all_links.append(l)
-        except Exception:
-            pass
+    # Direct sitemap venue URLs join the queue without labels (parsed later).
+    for p in sorted(direct_venues):
+        if p not in venue_links:
+            city = p.split("/venues/", 1)[0]
+            venue_links[p] = {"key": p, "label": "", "city": city}
+
+    all_links = list(venue_links.values())
     print(f"phase A done: {len(all_links)} unique venue links", flush=True)
     return all_links
+
+
+# city slug per direct venue URL (set during sitemap parse)
+_venue_city_slugs: dict[str, str] = {}
 
 
 def phase_b_venues(all_links: list[dict]) -> list[dict]:
