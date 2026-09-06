@@ -329,18 +329,41 @@ function VenueCard({
     if (url) Linking.openURL(url).catch(() => {});
   };
 
+  // Subtitle: street + number from the address's first line, then the city —
+  // "67 Wentworth Pl, San Francisco". Avoids "San Francisco, San Francisco"
+  // when the street line already is the city, and falls back cleanly when
+  // either part is missing (scraped rows are uneven).
+  const street = venue.address.split(',')[0].trim();
+  const cityName = venue.city.trim();
+  const addressLine =
+    street && cityName && street.toLowerCase() !== cityName.toLowerCase()
+      ? `${street}, ${cityName}`
+      : street || cityName;
+
   return (
     <Card>
       <View style={styles.venueHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.venueName}>{venue.name}</Text>
-          <Text style={styles.venueCity}>{venue.city}</Text>
+          <Text style={styles.venueCity}>{addressLine}</Text>
+          {venue.phone ? (
+            <Text style={styles.venuePhone}>📞 {venue.phone}</Text>
+          ) : null}
         </View>
-        {venue.distance_miles != null && (
-          <View style={styles.venueDist}>
-            <Text style={styles.venueDistText}>{venue.distance_miles} mi</Text>
-          </View>
-        )}
+        <View style={styles.headerChips}>
+          {venue.distance_miles != null && (
+            <View style={styles.venueDist}>
+              <Text style={styles.venueDistText}>{venue.distance_miles} mi</Text>
+            </View>
+          )}
+          <Pressable
+            onPress={openMaps}
+            style={({ pressed }) => [styles.venueDist, pressed && { opacity: 0.85 }]}
+            accessibilityLabel={`Open ${venue.name} in maps`}
+          >
+            <Text style={styles.venueDistText}>📍 Map</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Says when the next night is, so the list reads the same whether or not
@@ -377,12 +400,6 @@ function VenueCard({
       </View>
 
       <View style={styles.venueFooter}>
-        <Pressable onPress={openMaps} hitSlop={8}>
-          <Text style={[styles.venueFooterText, styles.venueMapsLink]}>
-            📍 {venue.address}, {venue.city}
-          </Text>
-        </Pressable>
-        {venue.phone ? <Text style={styles.venueFooterText}>📞 {venue.phone}</Text> : null}
         {!stripeConfigured && (
           <Text style={[styles.venueFooterText, { color: Colors.yellow }]}>
             · test mode (no real charge)
@@ -536,6 +553,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
   },
+  venuePhone: {
+    fontSize: 12,
+    color: Colors.textMute,
+    marginTop: 4,
+  },
+  headerChips: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   venueDist: {
     backgroundColor: 'rgba(95, 184, 168, 0.12)',
     borderColor: 'rgba(95, 184, 168, 0.3)',
@@ -572,9 +598,5 @@ const styles = StyleSheet.create({
   venueFooterText: {
     fontSize: 12,
     color: Colors.textMute,
-  },
-  venueMapsLink: {
-    color: Colors.cyan,
-    textDecorationLine: 'underline',
   },
 });
