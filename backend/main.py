@@ -61,6 +61,25 @@ from kj_site_light import _kj_site_html_light
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "thehopper.db"
+
+# Where a bare /api/venues request lands (no lat/lng, no city). Anchored to
+# the Space Coast community the directory grew out of. A request with no
+# anchor of its own is treated as "someone nearby", never as "show me
+# everything" — the unfiltered national list is a one-request copy of the
+# directory and is not an API surface.
+DEFAULT_SEARCH_COORDS = (28.0776, -80.6081)  # (lat, lng) — Melbourne, FL
+
+# Coordinate searches are capped at this radius unless the client asks for a
+# specific one. Without it, any lat/lng request (including a bare one that
+# falls back to DEFAULT_SEARCH_COORDS) would return the whole national table
+# distance-sorted — the same one-request copy, just reordered.
+DEFAULT_RADIUS_MILES = 25.0
+
+# City searches are substring matches, so "city=a" would match nearly every
+# venue in one request. The largest real city in the table is ~72 venues;
+# 150 leaves headroom for any genuine search while forcing a scraper into
+# dozens of paginated requests instead of one.
+CITY_RESULT_CAP = 150
 # Frontend build output is served by FastAPI in production; in dev the Vite
 # dev server (port 5173) proxies /api to this server.
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
@@ -1487,29 +1506,43 @@ def list_venues(
     lat: float | None = Query(None, description="User latitude"),
     lng: float | None = Query(None, description="User longitude"),
     city: str | None = Query(None, description="Filter by city name"),
-    include_unscheduled: bool = Query(
-        False,
-        description="Include venues that have no karaoke nights set (admin/import review)",
-    ),
     radius_miles: float | None = Query(
         None,
         description="Max distance in miles when lat/lng are given. Venues beyond it are dropped — the app must never surface events thousands of miles away as if they were local options.",
     ),
 ):
-    """List karaoke venues, optionally sorted by distance from (lat,lng).
+    """List karaoke venues, always scoped to a location or city.
 
-    Venues with no karaoke nights are excluded by default. A bulk import can
-    easily add hundreds of bars that have not had a schedule filled in yet, and
-    a singer cannot do anything with a venue that has no night — it is not a
-    place to sing, it is just an address.
+    Every request must be anchored somewhere: lat/lng or a city substring.
+    Coordinate searches are capped at DEFAULT_RADIUS_MILES unless the client
+    passes a radius_miles of its own. Bare requests are treated as "someone
+    near DEFAULT_SEARCH_COORDS" — the unfiltered national list is a
+    one-request copy of the directory and is not an API surface. City
+    results are capped at CITY_RESULT_CAP for the same reason.
+    Venues with no karaoke nights are always excluded: a bulk import can
+    easily add hundreds of bars that have not had a schedule filled in yet,
+    and a singer cannot do anything with a venue that has no night — it is
+    not a place to sing, it is just an address.
     """
+    if lat is not None and lng is not None:
+        if radius_miles is None:
+            radius_miles = DEFAULT_RADIUS_MILES
+    elif city:
+        pass  # anchored by city; the substring filter below does the rest
+    elif lat is None and lng is None:
+        lat, lng = DEFAULT_SEARCH_COORDS
+        radius_miles = DEFAULT_RADIUS_MILES
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="lat and lng must be provided together, or use city",
+        )
     with db() as conn:
         rows = conn.execute("SELECT * FROM venues").fetchall()
-        if not include_unscheduled:
-            rows = [
-                r for r in rows
-                if has_real_schedule(r["karaoke_nights"], r["start_time"])
-            ]
+        rows = [
+            r for r in rows
+            if has_real_schedule(r["karaoke_nights"], r["start_time"])
+        ]
         # Build a map of kj_id -> song_request_required for all KJs
         kj_req_map: dict[int, bool] = {}
         kj_rows = conn.execute("SELECT id, song_request_required FROM kjs").fetchall()
@@ -1531,6 +1564,8 @@ def list_venues(
 
     if lat is not None and lng is not None:
         out.sort(key=lambda v: (v["distance_miles"] is None, v["distance_miles"]))
+    elif len(out) > CITY_RESULT_CAP:
+        out = out[:CITY_RESULT_CAP]
 
     return out
 
