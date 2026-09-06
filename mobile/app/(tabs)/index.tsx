@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { router } from 'expo-router';
 import type { AppConfig, Venue } from '../../src/types';
 import { api } from '../../src/api';
@@ -153,35 +163,43 @@ export default function VenuesScreen() {
             accessibilityLabel={`Search radius: ${radiusMiles} miles. Tap to change.`}
           >
             <Text style={styles.radiusBtnText}>{radiusMiles} mi</Text>
-            <Text style={styles.radiusBtnCaret}>{radiusOpen ? ' ▴' : ' ▾'}</Text>
+            <Text style={styles.radiusBtnCaret}> ▾</Text>
           </Pressable>
         </View>
         {radiusOpen && (
-          <View style={styles.radiusSheet}>
-            <Text style={styles.radiusSheetLabel}>Show karaoke within</Text>
-            <View style={styles.radiusOptions}>
-              {RADIUS_OPTIONS.map((m) => (
-                <Pressable
-                  key={m}
-                  onPress={() => handleRadiusChange(m)}
-                  style={({ pressed }) => [
-                    styles.radiusOption,
-                    m === radiusMiles && styles.radiusOptionActive,
-                    pressed && styles.whenChipPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.radiusOptionText,
-                      m === radiusMiles && styles.radiusOptionTextActive,
+          <Modal
+            transparent
+            visible={radiusOpen}
+            animationType="fade"
+            onRequestClose={() => setRadiusOpen(false)}
+          >
+            {/* Full-screen scrim; tap outside the card to dismiss. */}
+            <Pressable style={styles.modalScrim} onPress={() => setRadiusOpen(false)}>
+              <Pressable style={styles.modalCard} onPress={() => {}}>
+                <Text style={styles.modalTitle}>Show karaoke within</Text>
+                {RADIUS_OPTIONS.map((m) => (
+                  <Pressable
+                    key={m}
+                    onPress={() => handleRadiusChange(m)}
+                    style={({ pressed }) => [
+                      styles.modalRow,
+                      pressed && styles.whenChipPressed,
                     ]}
                   >
-                    {m} mi
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
+                    <Text
+                      style={[
+                        styles.modalRowText,
+                        m === radiusMiles && styles.modalRowTextActive,
+                      ]}
+                    >
+                      {m} miles
+                    </Text>
+                    {m === radiusMiles && <Text style={styles.modalCheck}>✓</Text>}
+                  </Pressable>
+                ))}
+              </Pressable>
+            </Pressable>
+          </Modal>
         )}
         <View style={styles.cityRow}>
           <TextInput
@@ -294,6 +312,16 @@ function VenueCard({
 }) {
   const nextNight = eventDayLabel(venue);
 
+  const openMaps = () => {
+    const q = encodeURIComponent(`${venue.name}, ${venue.address}, ${venue.city}`);
+    const url = Platform.select({
+      // Apple Maps app handles its own scheme on iOS; web users get Google Maps.
+      ios: `maps://app?daddr=${q}`,
+      default: `https://maps.google.com/?daddr=${q}`,
+    });
+    if (url) Linking.openURL(url).catch(() => {});
+  };
+
   return (
     <Card>
       <View style={styles.venueHeader}>
@@ -342,6 +370,11 @@ function VenueCard({
       </View>
 
       <View style={styles.venueFooter}>
+        <Pressable onPress={openMaps} hitSlop={8}>
+          <Text style={[styles.venueFooterText, styles.venueMapsLink]}>
+            📍 {venue.address}, {venue.city}
+          </Text>
+        </Pressable>
         {venue.phone ? <Text style={styles.venueFooterText}>📞 {venue.phone}</Text> : null}
         {!stripeConfigured && (
           <Text style={[styles.venueFooterText, { color: Colors.yellow }]}>
@@ -363,6 +396,7 @@ const styles = StyleSheet.create({
   },
   radiusBtn: {
     minHeight: TAP_HEIGHT,
+    minWidth: 96,
     paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -380,40 +414,38 @@ const styles = StyleSheet.create({
     color: Colors.textMute,
     fontSize: 12,
   },
-  radiusSheet: {
-    marginTop: Spacing.sm,
-    padding: Spacing.md,
+  modalScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 320,
     backgroundColor: Colors.bg2,
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: Radius.md,
+    padding: Spacing.md,
   },
-  radiusSheetLabel: {
+  modalTitle: {
     fontSize: 13,
     color: Colors.textDim,
-    marginBottom: 10,
+    marginBottom: 6,
   },
-  radiusOptions: {
+  modalRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  radiusOption: {
-    minHeight: 40,
-    paddingHorizontal: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.bg,
-    borderRadius: Radius.pill,
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: 8,
+    borderRadius: Radius.sm,
   },
-  radiusOptionActive: {
-    backgroundColor: Colors.pink,
-    borderColor: 'transparent',
-  },
-  radiusOptionText: { color: Colors.textDim, fontSize: 13, fontWeight: '600' },
-  radiusOptionTextActive: { color: '#fff', fontWeight: '700' },
+  modalRowText: { color: Colors.textDim, fontSize: 16, fontWeight: '600' },
+  modalRowTextActive: { color: Colors.text, fontWeight: '700' },
+  modalCheck: { color: Colors.pink, fontSize: 16, fontWeight: '700' },
   cityRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
@@ -531,5 +563,9 @@ const styles = StyleSheet.create({
   venueFooterText: {
     fontSize: 12,
     color: Colors.textMute,
+  },
+  venueMapsLink: {
+    color: Colors.cyan,
+    textDecorationLine: 'underline',
   },
 });
