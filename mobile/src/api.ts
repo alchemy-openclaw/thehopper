@@ -75,12 +75,13 @@ function withQuery(base: string, params: Record<string, string | undefined>): st
 export const api = {
   getConfig: () => jsonFetch<AppConfig>(`${API_BASE}/config`),
 
-  getVenues: (lat?: number, lng?: number, city?: string) =>
+  getVenues: (lat?: number, lng?: number, city?: string, radiusMiles?: number) =>
     jsonFetch<Venue[]>(
       withQuery(`${API_BASE}/venues`, {
         lat: lat != null ? String(lat) : undefined,
         lng: lng != null ? String(lng) : undefined,
         city,
+        radius_miles: radiusMiles != null ? String(radiusMiles) : undefined,
       }),
     ),
 

@@ -1491,6 +1491,10 @@ def list_venues(
         False,
         description="Include venues that have no karaoke nights set (admin/import review)",
     ),
+    radius_miles: float | None = Query(
+        None,
+        description="Max distance in miles when lat/lng are given. Venues beyond it are dropped — the app must never surface events thousands of miles away as if they were local options.",
+    ),
 ):
     """List karaoke venues, optionally sorted by distance from (lat,lng).
 
@@ -1519,6 +1523,8 @@ def list_venues(
         dist = None
         if lat is not None and lng is not None:
             dist = haversine_miles(lat, lng, r["lat"], r["lng"])
+            if radius_miles is not None and dist is not None and dist > radius_miles:
+                continue
         kj_id = r["kj_id"] if "kj_id" in r.keys() else None
         song_required = kj_req_map.get(kj_id, False) if kj_id else False
         out.append(venue_row_to_dict(r, dist, song_required))

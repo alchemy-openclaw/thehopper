@@ -23,6 +23,10 @@ type Filter =
   | { kind: 'near' }
   | { kind: 'city'; city: string };
 
+/** Radius options for the near-me search, in miles. */
+const RADIUS_OPTIONS = [10, 20, 30, 40, 50];
+const DEFAULT_RADIUS_MILES = 25;
+
 export default function VenuesScreen() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +37,11 @@ export default function VenuesScreen() {
   // Default to what a singer can actually act on tonight. A venue whose next
   // night is Thursday is noise when you are deciding where to go now.
   const [soonOnly, setSoonOnly] = useState(true);
+  const [radiusMiles, setRadiusMiles] = useState(DEFAULT_RADIUS_MILES);
+  const [radiusOpen, setRadiusOpen] = useState(false);
+  // Last GPS fix, kept so changing the radius re-runs the same search
+  // without asking for location permission again.
+  const [lastLocation, setLastLocation] = useState<{ lat: number; lng: number } | null>(null);
   const { selectVenue } = useVenueContext();
 
   const visibleVenues = useMemo(
@@ -49,11 +58,11 @@ export default function VenuesScreen() {
     [venues],
   );
 
-  const loadVenues = async (lat?: number, lng?: number, cityFilter?: string) => {
+  const loadVenues = async (lat?: number, lng?: number, cityFilter?: string, radius?: number) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getVenues(lat, lng, cityFilter);
+      const data = await api.getVenues(lat, lng, cityFilter, radius);
       setVenues(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load venues');
@@ -71,12 +80,28 @@ export default function VenuesScreen() {
     setError(null);
     try {
       const { lat, lng } = await getGeolocation();
+      setLastLocation({ lat, lng });
       setFilter({ kind: 'near' });
       setCity('');
-      await loadVenues(lat, lng);
+      setRadiusOpen(false);
+      await loadVenues(lat, lng, undefined, radiusMiles);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not get location');
     }
+  };
+
+  /** Changing the radius re-runs the last near-me search — no new permission
+      prompt, no re-sorting surprise. If there is no fix yet, locate first. */
+  const handleRadiusChange = async (miles: number) => {
+    setRadiusMiles(miles);
+    setRadiusOpen(false);
+    if (!lastLocation) {
+      await handleLocate();
+      return;
+    }
+    setFilter({ kind: 'near' });
+    setCity('');
+    await loadVenues(lastLocation.lat, lastLocation.lng, undefined, miles);
   };
 
   const handleCitySearch = () => {
@@ -103,7 +128,7 @@ export default function VenuesScreen() {
 
   const filterLabel =
     filter.kind === 'near'
-      ? 'Sorted by distance from your location.'
+      ? `Sorted by distance, within ${radiusMiles} mi of your location.`
       : filter.kind === 'city'
         ? `Showing venues in “${filter.city}”.`
         : null;
@@ -115,7 +140,49 @@ export default function VenuesScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <Card style={styles.searchCard}>
-        <Button label="Find karaoke near me" onPress={handleLocate} disabled={loading} />
+        <View style={styles.findRow}>
+          <View style={{ flex: 1 }}>
+            <Button label="Find karaoke near me" onPress={handleLocate} disabled={loading} />
+          </View>
+          <Pressable
+            onPress={() => setRadiusOpen((o) => !o)}
+            style={({ pressed }) => [
+              styles.radiusBtn,
+              pressed && styles.whenChipPressed,
+            ]}
+            accessibilityLabel={`Search radius: ${radiusMiles} miles. Tap to change.`}
+          >
+            <Text style={styles.radiusBtnText}>{radiusMiles} mi</Text>
+            <Text style={styles.radiusBtnCaret}>{radiusOpen ? ' ▴' : ' ▾'}</Text>
+          </Pressable>
+        </View>
+        {radiusOpen && (
+          <View style={styles.radiusSheet}>
+            <Text style={styles.radiusSheetLabel}>Show karaoke within</Text>
+            <View style={styles.radiusOptions}>
+              {RADIUS_OPTIONS.map((m) => (
+                <Pressable
+                  key={m}
+                  onPress={() => handleRadiusChange(m)}
+                  style={({ pressed }) => [
+                    styles.radiusOption,
+                    m === radiusMiles && styles.radiusOptionActive,
+                    pressed && styles.whenChipPressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.radiusOptionText,
+                      m === radiusMiles && styles.radiusOptionTextActive,
+                    ]}
+                  >
+                    {m} mi
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
         <View style={styles.cityRow}>
           <TextInput
             style={styles.input}
@@ -290,6 +357,63 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   content: { padding: Spacing.lg, paddingBottom: 100 },
   searchCard: { marginBottom: Spacing.md },
+  findRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  radiusBtn: {
+    minHeight: TAP_HEIGHT,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.bg2,
+    borderRadius: Radius.sm,
+  },
+  radiusBtnText: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  radiusBtnCaret: {
+    color: Colors.textMute,
+    fontSize: 12,
+  },
+  radiusSheet: {
+    marginTop: Spacing.sm,
+    padding: Spacing.md,
+    backgroundColor: Colors.bg2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+  },
+  radiusSheetLabel: {
+    fontSize: 13,
+    color: Colors.textDim,
+    marginBottom: 10,
+  },
+  radiusOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  radiusOption: {
+    minHeight: 40,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.bg,
+    borderRadius: Radius.pill,
+  },
+  radiusOptionActive: {
+    backgroundColor: Colors.pink,
+    borderColor: 'transparent',
+  },
+  radiusOptionText: { color: Colors.textDim, fontSize: 13, fontWeight: '600' },
+  radiusOptionTextActive: { color: '#fff', fontWeight: '700' },
   cityRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
