@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { AppConfig, Venue } from '../../src/types';
 import { api } from '../../src/api';
@@ -358,10 +359,11 @@ function VenueCard({
           )}
           <Pressable
             onPress={openMaps}
-            style={({ pressed }) => [styles.venueDist, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [styles.venueDist, styles.mapChip, pressed && { opacity: 0.85 }]}
             accessibilityLabel={`Open ${venue.name} in maps`}
           >
-            <Text style={styles.venueDistText}>📍 Map</Text>
+            <Ionicons name="location" size={13} color={Colors.cyan} />
+            <Text style={styles.venueDistText}> Map</Text>
           </Pressable>
         </View>
       </View>
@@ -561,6 +563,11 @@ const styles = StyleSheet.create({
   headerChips: {
     alignItems: 'flex-end',
     gap: 6,
+  },
+  mapChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   venueDist: {
     backgroundColor: 'rgba(95, 184, 168, 0.12)',
