@@ -4625,6 +4625,36 @@ def support_page() -> HTMLResponse:
 
 
 # ---------------------------------------------------------------------------
+# SEO hub pages (server-rendered static HTML — the SPA can't give crawlers
+# content). Declared before the SPA catch-all below, same as /privacy.
+# ---------------------------------------------------------------------------
+
+import seo_hubs
+
+
+@app.get("/karaoke", response_class=HTMLResponse)
+@app.get("/karaoke/", response_class=HTMLResponse)
+def seo_states_index() -> HTMLResponse:
+    return HTMLResponse(content=seo_hubs.states_index(), media_type="text/html")
+
+
+@app.get("/karaoke/{state}", response_class=HTMLResponse)
+def seo_state(state: str):
+    page = seo_hubs.state_page(state)
+    if page is None:
+        raise HTTPException(status_code=404)
+    return HTMLResponse(content=page, media_type="text/html")
+
+
+@app.get("/karaoke/{state}/{city}", response_class=HTMLResponse)
+def seo_city(state: str, city: str):
+    page = seo_hubs.city_page(state, city)
+    if page is None:
+        raise HTTPException(status_code=404)
+    return HTMLResponse(content=page, media_type="text/html")
+
+
+# ---------------------------------------------------------------------------
 # Static file serving (production: built frontend)
 # ---------------------------------------------------------------------------
 
