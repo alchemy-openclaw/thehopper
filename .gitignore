@@ -1,13 +1,7 @@
-node_modules/
+# Scraper cache dirs — rebuildable, keep the repo lean
+data/.fk_cities_cache/
+data/.fk_venues_cache/
+data/.karaokelocations_cache/
+
 __pycache__/
 *.pyc
-venv/
-.env
-.expo/
-dist/
-build/
-*.db
-.DS_Store
-
-# Uploaded venue photos (user content, not source)
-backend/media/
