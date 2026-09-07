@@ -5,3 +5,7 @@ data/.karaokelocations_cache/
 
 __pycache__/
 *.pyc
+
+# per-machine artifacts — never commit (see 6eae4e9)
+backend/venv/
+frontend/node_modules/
