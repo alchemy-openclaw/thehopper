@@ -1,0 +1,43 @@
+#!/bin/bash
+# pre-push guard: reject pushes that introduce machine artifacts or secrets.
+# Recurring problem (Sep 2026): local tooling committed backend/venv/,
+# frontend/node_modules/, a 0-byte thehopper.db blob (nearly clobbered the
+# 24MB live prod DB), and .env files with live Stripe keys.
+#
+# Activate per clone:   git config core.hooksPath .githooks
+# Bypass (emergencies): git push --no-verify
+
+set -u
+ZERO="0000000000000000000000000000000000000000"
+PATTERN='(^|/)\.env$|(^|/)\.env\.[^/]+$|(^|/)[^/]*\.(db|sqlite|sqlite3)$|(^|/)\.?venv/|(^|/)node_modules/|(^|/)\.DS_Store$'
+
+blocked=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # branch deletion — nothing to check
+    [ "$local_sha" = "$ZERO" ] && continue
+
+    if [ "$remote_sha" = "$ZERO" ]; then
+        # new branch: scan the full tip tree
+        files=$(git ls-tree -r --name-only "$local_sha")
+    else
+        # only files introduced by commits that are actually new to the remote
+        files=$(git diff --name-only "$remote_sha..$local_sha")
+    fi
+
+    hits=$(printf '%s\n' "$files" | grep -E "$PATTERN" || true)
+    if [ -n "$hits" ]; then
+        echo "" >&2
+        echo "pre-push: REFUSING — these paths look like machine artifacts or secrets:" >&2
+        echo "$hits" >&2
+        echo "" >&2
+        echo "  untrack them:   git rm -r --cached <path>" >&2
+        echo "  then gitignore:  echo '<path>' >> .gitignore" >&2
+        echo "  (venv/, node_modules/, thehopper.db, .env are already in .gitignore —" >&2
+        echo "   if these are staged, something new swept them in; check git status)" >&2
+        echo "" >&2
+        blocked=1
+    fi
+done
+
+exit $blocked
