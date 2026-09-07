@@ -23,6 +23,8 @@ export interface Venue {
   state?: string | null;
   source?: string | null;
   confidence?: string | null;
+  /** ISO country code inferred from the coordinates, server-side. */
+  country?: string | null;
 }
 
 export interface Song {

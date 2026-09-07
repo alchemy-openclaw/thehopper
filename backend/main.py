@@ -29,7 +29,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from email.mime.text import MIMEText
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, NamedTuple
 from urllib.parse import urlencode
 from urllib.request import Request as UrllibRequest, urlopen
 
@@ -143,6 +143,15 @@ def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # Great-circle distance, in SQL. Registering the Python function beats both
+    # alternatives here: SQLite's built-in trig needs SQLITE_ENABLE_MATH_FUNCTIONS,
+    # which is a compile flag we do not control on the deploy host, and
+    # SpatiaLite is a loadable-extension dependency that buys nothing at this
+    # table size. This works on every build with no packaging risk.
+    #
+    # It is not indexable, so callers still narrow with the bounding box in
+    # _bbox_for_radius() first and use this only to trim the corners.
+    conn.create_function("haversine_miles", 4, haversine_miles, deterministic=True)
     return conn
 
 
@@ -422,6 +431,49 @@ def init_db() -> None:
         if "state" not in vcols:
             conn.execute("ALTER TABLE venues ADD COLUMN state TEXT")
 
+        # Migration: country code, and the city-centroid cache behind city
+        # search.
+        #
+        # City search used to be a substring test on the city column, which is
+        # a scraped mess — URL slugs ("san-francisco") next to display names
+        # ("Chicago") next to bare lowercase. Worse, it could not tell
+        # Melbourne, FL from Melbourne, VIC: the names are genuinely identical,
+        # so no amount of string cleverness separates them. Coordinates do.
+        # Searching a city now resolves it to a centroid and runs the same
+        # radius query as "near me".
+        if "country" not in vcols:
+            conn.execute("ALTER TABLE venues ADD COLUMN country TEXT")
+
+        # Bounding-box prefilter for radius queries. Not a spatial index, but
+        # lat/lng BETWEEN is a plain range scan this can serve, and it is what
+        # keeps haversine off the whole table.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_venues_lat_lng ON venues(lat, lng)"
+        )
+
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS city_centroids (
+                   -- _normalize_city() of the user's query. Spellings that
+                   -- normalize differently ("sf" vs "san francisco ca") keep
+                   -- their own row and resolve to the same point; each costs
+                   -- one geocode ever, which is the property that matters.
+                   -- The trailing state is deliberately NOT stripped here the
+                   -- way _city_matches() strips it: "kansas city ks" and
+                   -- "kansas city mo" are two different cities, and collapsing
+                   -- them would put KCK venues in a KCMO search.
+                   query      TEXT PRIMARY KEY,
+                   lat        REAL,
+                   lng        REAL,
+                   country    TEXT,
+                   display    TEXT,
+                   -- A miss is cached too (lat/lng NULL): an unresolvable city
+                   -- must not re-hit the geocoder on every keystroke-free
+                   -- retry, and Nominatim rate-limits us at 1/sec.
+                   resolved   INTEGER NOT NULL DEFAULT 0,
+                   created_at TEXT NOT NULL
+               )"""
+        )
+
         # Migration: private-hire availability on the KJ profile. The KJ hire
         # pages are the commercial product, so availability has to be a
         # first-class, self-reported field rather than prose buried in bio.
@@ -472,6 +524,23 @@ def init_db() -> None:
                         s["difficulty"], ",".join(s["range_fit"]), s.get("notes", ""),
                     ),
                 )
+
+        # Country backfill. Runs every startup rather than once alongside the
+        # ALTER, so it also catches rows added by seeding (which happens after
+        # the migrations above) and by any import that forgets the column.
+        # Inferred from where the venue actually is, not from the city text —
+        # that is the field we stopped trusting. Anything outside both boxes
+        # stays NULL so an admin can see it, rather than being labelled US.
+        conn.execute(
+            """UPDATE venues SET country = 'US'
+               WHERE country IS NULL
+                 AND lat BETWEEN 18 AND 72 AND lng BETWEEN -180 AND -66"""
+        )
+        conn.execute(
+            """UPDATE venues SET country = 'AU'
+               WHERE country IS NULL
+                 AND lat BETWEEN -44 AND -10 AND lng BETWEEN 112 AND 154"""
+        )
 
         # Migration: add paid_at column if missing (defensive for older DBs)
         cols = {row["name"] for row in conn.execute("PRAGMA table_info(payments)")}
@@ -652,6 +721,154 @@ def _geocode(query: str) -> tuple[float | None, float | None]:
     except Exception:
         pass
     return None, None
+
+
+def _country_from_coords(lat: float | None, lng: float | None) -> str | None:
+    """Country code from a coordinate, for the two regions this directory has.
+
+    Deliberately coarse and deliberately not a geocoder call: it mirrors the
+    backfill in init_db so a row written at runtime and a row fixed by the
+    migration end up labelled the same way. Anything outside both boxes stays
+    NULL rather than being guessed at.
+    """
+    if lat is None or lng is None:
+        return None
+    if 18 <= lat <= 72 and -180 <= lng <= -66:
+        return "US"
+    if -44 <= lat <= -10 and 112 <= lng <= 154:
+        return "AU"
+    return None
+
+
+def _bbox_for_radius(lat: float, lng: float, miles: float) -> tuple[float, float, float, float]:
+    """(min_lat, max_lat, min_lng, max_lng) enclosing a radius around a point.
+
+    A cheap, index-friendly prefilter — plain range comparisons, no trig — that
+    the exact haversine test then trims to a circle. Longitude degrees shrink
+    toward the poles, hence the cosine; the divisor is floored so a point near
+    a pole widens the box rather than dividing by zero.
+    """
+    d_lat = miles / 69.0
+    d_lng = miles / max(69.0 * math.cos(math.radians(lat)), 1e-6)
+    return (lat - d_lat, lat + d_lat, lng - d_lng, lng + d_lng)
+
+
+class CityCentroid(NamedTuple):
+    lat: float
+    lng: float
+    country: str | None
+    display: str | None
+
+
+def _city_centroid(query: str) -> CityCentroid | None:
+    """Resolve a typed city to a point, caching the answer in the database.
+
+    Keyed on the normalized query, so each distinct spelling costs one geocode
+    ever and every later search for it is a local read. The whole query is
+    geocoded, state included — that is what separates Kansas City, KS from
+    Kansas City, MO. Misses are cached too: an unresolvable city must not
+    re-hit a geocoder we are rate-limited to one call a second against.
+
+    The in-process _nominatim cache is not enough for this — it dies on every
+    restart, and a city centroid is exactly the kind of fact that should
+    survive a deploy.
+    """
+    key = " ".join(_normalize_city(query).split())
+    if not key:
+        return None
+
+    with db() as conn:
+        row = conn.execute(
+            "SELECT lat, lng, country, display, resolved FROM city_centroids WHERE query = ?",
+            (key,),
+        ).fetchone()
+    if row is not None:
+        if not row["resolved"] or row["lat"] is None:
+            return None
+        return CityCentroid(row["lat"], row["lng"], row["country"], row["display"])
+
+    lat = lng = None
+    country = display = None
+    try:
+        results = _nominatim(
+            "search",
+            {"q": query.strip(), "format": "jsonv2", "addressdetails": 1, "limit": 1},
+        )
+        if results:
+            r = results[0]
+            lat, lng = float(r["lat"]), float(r["lon"])
+            addr = r.get("address", {}) or {}
+            code = (addr.get("country_code") or "").upper()
+            country = code or None
+            display = r.get("display_name")
+    except Exception:
+        # A geocoder outage must not be cached as "this city does not exist",
+        # so bail without writing a row and let the caller fall back.
+        return None
+
+    with db() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO city_centroids
+               (query, lat, lng, country, display, resolved, created_at)
+               VALUES (?,?,?,?,?,?,datetime('now'))""",
+            (key, lat, lng, country, display, 1 if lat is not None else 0),
+        )
+    if lat is None:
+        return None
+    return CityCentroid(lat, lng, country, display)
+
+
+def _normalize_city(value: str | None) -> str:
+    """Reduce a city to space-separated lowercase words for comparison.
+
+    The city column is not clean. A scraped import wrote URL slugs
+    ("san-francisco", "melbourne-vic-au") alongside properly cased names
+    ("Chicago", "West Melbourne") and bare lowercase ("austin"), so the same
+    place exists under several spellings. Comparing raw strings meant
+    "San Francisco" found nothing while "san-francisco" found seventeen.
+
+    Punctuation becomes a word break, so a slug and a typed name converge on
+    the same token string.
+    """
+    if not value:
+        return ""
+    out = []
+    for ch in value.lower():
+        out.append(ch if ch.isalnum() else " ")
+    return " ".join("".join(out).split())
+
+
+def _strip_trailing_state(tokens: list[str]) -> list[str]:
+    """Drop a trailing state off a query: "san francisco ca" -> "san francisco".
+
+    People type the state; the city column never contains one. Only the last
+    token is considered, and only when the rest would survive — "kansas" as a
+    whole query must stay a city search.
+    """
+    if len(tokens) < 2:
+        return tokens
+    last = tokens[-1].upper()
+    if last in US_STATES or last in US_STATE_NAMES:
+        return tokens[:-1]
+    return tokens
+
+
+def _city_matches(query: str, stored: str | None) -> bool:
+    """Does a user's city query match a stored city value?
+
+    Anchored at a word boundary, open-ended at the tail. That combination is
+    what makes "bakers" still find Bakersfield while "SF" stops matching it:
+    a raw substring test matched the "sf" inside "baker-sf-ield" and
+    "elm-sf-ord", so searching SF returned seven venues in entirely the wrong
+    cities — worse than returning none, because it looked like it worked.
+    """
+    q = " ".join(_strip_trailing_state(_normalize_city(query).split()))
+    if not q:
+        return True  # an all-state query ("CA") filters nothing here
+    c = _normalize_city(stored)
+    if not c:
+        return False
+    return f" {q}" in f" {c}"
 
 
 def _state_from_address(address: str | None) -> str | None:
@@ -1170,6 +1387,9 @@ class VenueOut(BaseModel):
     state: str | None = None
     source: str | None = None
     confidence: str | None = None
+    # ISO country code, inferred from the coordinates. Distinguishes the
+    # Melbourne, VIC rows from Melbourne, FL where the city text cannot.
+    country: str | None = None
 
 
 class SongOut(BaseModel):
@@ -1399,12 +1619,42 @@ class DeviceRegisterRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _display_city(raw: str | None, address: str | None = None) -> str | None:
+    """Turn a stored city value into something fit to show a person.
+
+    The column holds URL slugs for a good chunk of the table ("san-francisco"),
+    which render as-is on the venue card. The address usually carries the same
+    city properly cased ("1155 Grant Ave, San Francisco, CA 94133"), so prefer
+    that when a comma-separated part of it matches the stored value; otherwise
+    title-case the slug.
+
+    Read-time only — the stored value is left alone, so nothing that matches or
+    dedupes on it shifts under us.
+    """
+    if not raw or not raw.strip():
+        return raw
+    value = raw.strip()
+    normalized = _normalize_city(value)
+
+    if address:
+        for part in address.split(","):
+            part = part.strip()
+            if part and _normalize_city(part) == normalized:
+                return part
+
+    # Already looks like a display name (has capitals and no slug separators).
+    if value != value.lower() and "-" not in value and "_" not in value:
+        return value
+
+    return " ".join(w.capitalize() for w in normalized.split()) or value
+
+
 def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None, kj_song_required: bool = False) -> dict:
     return {
         "id": row["id"],
         "name": row["name"],
         "address": row["address"],
-        "city": row["city"],
+        "city": _display_city(row["city"], row["address"]),
         "lat": row["lat"],
         "lng": row["lng"],
         "karaoke_nights": [n for n in row["karaoke_nights"].split(",") if n],
@@ -1425,6 +1675,7 @@ def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None, kj_song_r
         "stripe_onboarding_status": row["stripe_onboarding_status"] if "stripe_onboarding_status" in row.keys() else "none",
         "song_request_required": kj_song_required,
         "state": row["state"] if "state" in row.keys() else None,
+        "country": row["country"] if "country" in row.keys() else None,
         "source": row["source"] if "source" in row.keys() else None,
         "confidence": row["confidence"] if "confidence" in row.keys() else None,
     }
@@ -1612,11 +1863,27 @@ def list_venues(
     and a singer cannot do anything with a venue that has no night — it is
     not a place to sing, it is just an address.
     """
+    # A city search resolves to a centroid and becomes the same radius query
+    # as "near me". That is what tells Melbourne, FL from Melbourne, VIC —
+    # identical names, 10,000 miles apart — and it makes radius_miles mean
+    # something for city searches, which previously ignored it outright.
+    centroid: CityCentroid | None = None
+    # Whether the client asked for a specific radius, as opposed to us
+    # defaulting one. It decides if the city-name fallback below is allowed to
+    # reach past the circle: a default radius is our guess and should be
+    # forgiving, but a radius the user picked on the chip is an instruction.
+    explicit_radius = radius_miles is not None
     if lat is not None and lng is not None:
         if radius_miles is None:
             radius_miles = DEFAULT_RADIUS_MILES
     elif city:
-        pass  # anchored by city; the substring filter below does the rest
+        centroid = _city_centroid(city)
+        if centroid is not None:
+            lat, lng = centroid.lat, centroid.lng
+            if radius_miles is None:
+                radius_miles = DEFAULT_RADIUS_MILES
+        # No centroid (unknown place, or the geocoder is down): fall through to
+        # the name match alone rather than returning nothing.
     elif lat is None and lng is None:
         lat, lng = DEFAULT_SEARCH_COORDS
         radius_miles = DEFAULT_RADIUS_MILES
@@ -1625,8 +1892,42 @@ def list_venues(
             status_code=422,
             detail="lat and lng must be provided together, or use city",
         )
+
     with db() as conn:
-        rows = conn.execute("SELECT * FROM venues").fetchall()
+        if lat is not None and lng is not None and radius_miles is not None:
+            # Bounding box in SQL (indexed range scan), exact circle via the
+            # registered haversine. On a city search with no explicit radius
+            # the name match is unioned back in, so a venue recorded as
+            # "Chicago" is still found when it sits outside our default circle
+            # — the city column is unreliable but it is not worthless, and a
+            # centroid is a point where a city is an area.
+            min_lat, max_lat, min_lng, max_lng = _bbox_for_radius(lat, lng, radius_miles)
+            rows = conn.execute(
+                """SELECT * FROM venues
+                   WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
+                     AND haversine_miles(?, ?, lat, lng) <= ?""",
+                (min_lat, max_lat, min_lng, max_lng, lat, lng, radius_miles),
+            ).fetchall()
+            if city and not explicit_radius:
+                seen_ids = {r["id"] for r in rows}
+                named = conn.execute("SELECT * FROM venues").fetchall()
+                rows = list(rows) + [
+                    r for r in named
+                    if r["id"] not in seen_ids and _city_matches(city, r["city"])
+                    # Only within the centroid's own country, or the name match
+                    # drags Melbourne, VIC back into a Melbourne, FL search.
+                    and (
+                        centroid is None
+                        or centroid.country is None
+                        or r["country"] is None
+                        or r["country"] == centroid.country
+                    )
+                ]
+        else:
+            rows = conn.execute("SELECT * FROM venues").fetchall()
+            if city:
+                rows = [r for r in rows if _city_matches(city, r["city"])]
+
         rows = [
             r for r in rows
             if has_real_schedule(r["karaoke_nights"], r["start_time"])
@@ -1639,13 +1940,12 @@ def list_venues(
 
     out = []
     for r in rows:
-        if city and city.lower() not in r["city"].lower():
-            continue
+        # Distance is still computed per row because the response carries it
+        # and the list is sorted by it; the SQL above has already done the
+        # filtering, including the radius.
         dist = None
         if lat is not None and lng is not None:
             dist = haversine_miles(lat, lng, r["lat"], r["lng"])
-            if radius_miles is not None and dist is not None and dist > radius_miles:
-                continue
         kj_id = r["kj_id"] if "kj_id" in r.keys() else None
         song_required = kj_req_map.get(kj_id, False) if kj_id else False
         out.append(venue_row_to_dict(r, dist, song_required))
@@ -3499,17 +3799,36 @@ def approve_submission(submission_id: int):
         if not sub:
             raise HTTPException(status_code=404, detail="Submission not found or already reviewed")
 
+        # Coordinates are mandatory now that search is geo-driven. The old
+        # fallback wrote (0.0, 0.0) — a point in the Gulf of Guinea — which was
+        # merely useless under a substring city search but is actively wrong
+        # under a radius one: the venue would surface for nobody, or for
+        # somebody 4,000 miles out to sea. Geocode here if the submission never
+        # got coordinates, and refuse rather than store a fiction.
+        sub_lat, sub_lng = sub["lat"], sub["lng"]
+        if sub_lat is None or sub_lng is None:
+            geo_q = ", ".join(p for p in (sub["address"], sub["city"]) if p)
+            sub_lat, sub_lng = _geocode(geo_q)
+        if sub_lat is None or sub_lng is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Could not place this venue on a map — fix the address on "
+                    "the submission and try again."
+                ),
+            )
+
         # Create the venue
         cur = conn.execute(
             """INSERT INTO venues
                (name, address, city, lat, lng, karaoke_nights, start_time, end_time,
                 kj_name, phone, website, price_jump_queue, premium_slot_position,
-                premium_slot_price, vibe, source, confidence)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                premium_slot_price, vibe, source, confidence, state, country)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 sub["name"], sub["address"], sub["city"],
-                sub["lat"] if sub["lat"] is not None else 0.0,
-                sub["lng"] if sub["lng"] is not None else 0.0,
+                sub_lat,
+                sub_lng,
                 sub["karaoke_nights"], sub["start_time"], sub["end_time"],
                 sub["kj_name"], sub["phone"], sub["website"],
                 5.0, 3, 5.0, sub["vibe"],
@@ -3519,6 +3838,8 @@ def approve_submission(submission_id: int):
                 # State for the SEO hub pages. Parse it from the address tail
                 # if the submitter didn't supply it ("... Melbourne, FL 32901").
                 _state_from_address(sub["address"]),
+                # Country from the coordinates, same rule as the backfill.
+                _country_from_coords(sub_lat, sub_lng),
             ),
         )
         venue_id = cur.lastrowid

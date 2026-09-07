@@ -26,6 +26,7 @@ import {
   Loading,
   MetaPill,
   NightsRow,
+  SplitButton,
 } from '../../src/components';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
@@ -91,6 +92,10 @@ export default function VenuesScreen() {
 
   const handleLocate = async () => {
     setError(null);
+    // The GPS fix is the slow half on a cold start, so the spinner has to
+    // cover it too — loadVenues only flips `loading` once the fix is in, which
+    // left the button looking inert for the couple of seconds that matter.
+    setLoading(true);
     try {
       const { lat, lng } = await getGeolocationCached();
       setLastLocation({ lat, lng });
@@ -100,6 +105,9 @@ export default function VenuesScreen() {
       await loadVenues(lat, lng, undefined, radiusMiles);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not get location');
+    } finally {
+      // loadVenues clears this itself on the happy path; this covers the throw.
+      setLoading(false);
     }
   };
 
@@ -154,22 +162,18 @@ export default function VenuesScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <Card style={styles.searchCard}>
-        <View style={styles.findRow}>
-          <View style={{ flex: 1 }}>
-            <Button label="Find karaoke near me" onPress={handleLocate} disabled={loading} />
-          </View>
-          <Pressable
-            onPress={() => setRadiusOpen((o) => !o)}
-            style={({ pressed }) => [
-              styles.radiusBtn,
-              pressed && styles.whenChipPressed,
-            ]}
-            accessibilityLabel={`Search radius: ${radiusMiles} miles. Tap to change.`}
-          >
-            <Text style={styles.radiusBtnText}>{radiusMiles} mi</Text>
-            <Text style={styles.radiusBtnCaret}> ▾</Text>
-          </Pressable>
-        </View>
+        {/* One control: the wide half runs the search, the mileage half opens
+            the radius picker and carries the spinner while either is working
+            (changing the radius re-runs the same search). */}
+        <SplitButton
+          label="Find karaoke near me"
+          onPress={handleLocate}
+          trailingLabel={`${radiusMiles} mi`}
+          onPressTrailing={() => setRadiusOpen((o) => !o)}
+          busy={loading}
+          disabled={loading}
+          trailingAccessibilityLabel={`Search radius: ${radiusMiles} miles. Tap to change.`}
+        />
         {radiusOpen && (
           <Modal
             transparent
@@ -222,17 +226,7 @@ export default function VenuesScreen() {
             style={styles.goBtn}
           />
         </View>
-        {filterLabel && (
-          <View style={styles.filterRow}>
-            <Text style={styles.filterText}>{filterLabel}</Text>
-            <Button
-              label="Clear search"
-              variant="secondary"
-              onPress={handleReset}
-              style={styles.clearBtn}
-            />
-          </View>
-        )}
+        {filterLabel && <Text style={styles.filterText}>{filterLabel}</Text>}
 
         {/* When karaoke is on. Defaults to the actionable window; the escape
             hatch matters because plenty of venues only run one night a week. */}
@@ -349,7 +343,7 @@ function VenueCard({
           <Text style={styles.venueName}>{venue.name}</Text>
           <Text style={styles.venueCity}>{addressLine}</Text>
           {venue.phone ? (
-            <Text style={styles.venuePhone}>📞 {venue.phone}</Text>
+            <Text style={styles.venuePhone}>{venue.phone}</Text>
           ) : null}
         </View>
         <View style={styles.headerChips}>
@@ -416,32 +410,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   content: { padding: Spacing.lg, paddingBottom: 100 },
   searchCard: { marginBottom: Spacing.md },
-  findRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  radiusBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    minHeight: TAP_HEIGHT,
-    minWidth: 96,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.bg2,
-    borderRadius: Radius.sm,
-  },
-  radiusBtnText: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  radiusBtnCaret: {
-    color: Colors.textMute,
-    fontSize: 12,
-  },
   modalScrim: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
@@ -493,17 +461,11 @@ const styles = StyleSheet.create({
   goBtn: {
     paddingHorizontal: 18,
   },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
-  },
   filterText: {
-    flex: 1,
     fontSize: 13,
     color: Colors.textDim,
     lineHeight: 18,
+    marginTop: Spacing.md,
   },
   whenRow: {
     flexDirection: 'row',
@@ -535,9 +497,6 @@ const styles = StyleSheet.create({
     color: Colors.textDim,
   },
   nextNightSoon: { color: Colors.pink },
-  clearBtn: {
-    paddingHorizontal: 14,
-  },
   venueHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

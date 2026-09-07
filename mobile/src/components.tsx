@@ -39,6 +39,78 @@ export function Button({
   );
 }
 
+// ---------- SplitButton ----------
+
+/**
+ * One button, two jobs: a wide primary action and a narrow trailing segment
+ * that opens a picker for a setting that action depends on.
+ *
+ * React Native has no primitive for this, and the community segmented-control
+ * package is a different thing entirely — it picks one value out of several,
+ * where here each half does its own job. So: two Pressables sharing one
+ * outline with a hairline divider.
+ *
+ * `busy` puts the spinner in the trailing segment rather than over the label.
+ * The wide segment keeps its wording while a search runs, which reads better
+ * than a button whose text vanishes; the cost is that the current value is
+ * briefly hidden, and that segment is where both paths spend their wait —
+ * changing the setting re-runs the action too.
+ */
+export function SplitButton({
+  label,
+  onPress,
+  trailingLabel,
+  onPressTrailing,
+  busy = false,
+  disabled = false,
+  trailingAccessibilityLabel,
+}: {
+  label: string;
+  onPress?: () => void;
+  trailingLabel: string;
+  onPressTrailing?: () => void;
+  busy?: boolean;
+  disabled?: boolean;
+  trailingAccessibilityLabel?: string;
+}) {
+  return (
+    <View style={[styles.split, disabled && styles.btnDisabled]}>
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={({ pressed }) => [styles.splitMain, pressed && styles.btnPressed]}
+      >
+        <Text style={styles.btnText} numberOfLines={1}>
+          {label}
+        </Text>
+      </Pressable>
+
+      <View style={styles.splitDivider} />
+
+      <Pressable
+        onPress={onPressTrailing}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={trailingAccessibilityLabel ?? trailingLabel}
+        style={({ pressed }) => [styles.splitTrailing, pressed && styles.btnPressed]}
+      >
+        {busy ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <>
+            <Text style={styles.splitTrailingText} numberOfLines={1}>
+              {trailingLabel}
+            </Text>
+            <Text style={styles.splitCaret}> ▾</Text>
+          </>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
 // ---------- Card ----------
 
 export function Card({ children, style }: { children: ReactNode; style?: object }) {
@@ -254,6 +326,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  split: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    minHeight: TAP_HEIGHT,
+    borderRadius: Radius.sm,
+    // Fill and shadow live on the container so the two segments read as one
+    // control rather than two buttons that happen to touch.
+    backgroundColor: Colors.pink,
+    overflow: 'hidden',
+    shadowColor: Colors.pink,
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  splitMain: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splitDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    marginVertical: Spacing.sm,
+  },
+  splitTrailing: {
+    minWidth: 84,
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // A touch darker so the segment is findable without breaking the single
+    // filled shape.
+    backgroundColor: 'rgba(0, 0, 0, 0.16)',
+  },
+  splitTrailingText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  splitCaret: { color: 'rgba(255, 255, 255, 0.75)', fontSize: 12 },
   primary: {
     backgroundColor: Colors.pink,
     shadowColor: Colors.pink,
