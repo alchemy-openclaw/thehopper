@@ -22,7 +22,7 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { api } from '../../../src/api';
 import { Button, Card, Banner, Loading, NightsRow } from '../../../src/components';
-import { AddressLookup } from '../../../src/address-lookup';
+import { VenueLookup } from '../../../src/venue-lookup';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../../src/theme';
 
 export default function KJAddVenueScreen() {
@@ -136,45 +136,39 @@ export default function KJAddVenueScreen() {
         </Text>
 
         <Card>
-          <Text style={styles.label}>venue name *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Coconuts on the Beach"
-            placeholderTextColor={Colors.textMute}
-            value={name}
-            onChangeText={setName}
-          />
-
-          <AddressLookup
+          {/* Name + city are typed here and the address comes back from the
+              lookup; the address field below is a fallback and a chance to
+              correct, not the primary way in. */}
+          <VenueLookup
+            name={name}
             city={city}
-            onPick={(s) => {
+            onChangeName={setName}
+            onChangeCity={setCity}
+            labelStyle={styles.label}
+            onAccept={(s) => {
+              if (s.name) setName(s.name);
               setAddress(s.address);
               setCity(s.city);
               setStateCode(s.state ?? '');
               setPickedCoords({ lat: s.lat, lng: s.lng });
+              // Only fill what is still blank — a value already typed beats
+              // whatever OSM has.
+              setPhone((prev) => prev || s.phone || '');
+              setWebsite((prev) => prev || s.website || '');
             }}
           />
 
           <Text style={styles.label}>address *</Text>
           <TextInput
             style={styles.input}
-            placeholder="123 main st"
+            placeholder="filled in by the lookup, or type it"
             placeholderTextColor={Colors.textMute}
             value={address}
             onChangeText={(t) => {
               setAddress(t);
-              // Hand-edited after picking — the coordinates no longer match.
+              // Hand-edited after accepting — the coordinates no longer match.
               setPickedCoords(null);
             }}
-          />
-
-          <Text style={styles.label}>city *</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="cocoa beach"
-            placeholderTextColor={Colors.textMute}
-            value={city}
-            onChangeText={setCity}
           />
 
           <Text style={styles.label}>karaoke nights</Text>

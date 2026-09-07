@@ -16,7 +16,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { getSessionToken, setSessionToken } from '../../src/session';
 import { api, API_BASE } from '../../src/api';
 import { getGeolocationCached } from '../../src/geo';
-import { AddressLookup } from '../../src/address-lookup';
+import { VenueLookup } from '../../src/venue-lookup';
 import { useKJContext } from '../../src/kj-context';
 import type { KJ, Venue } from '../../src/types';
 import {
@@ -509,46 +509,42 @@ export default function AddSpotScreen() {
           <>
             <Text style={styles.sectionLabel}>Venue Info</Text>
             <Card>
-              <Text style={styles.fieldLabel}>Venue name *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Coconuts on the Beach"
-                placeholderTextColor={Colors.textMute}
-                value={name}
-                onChangeText={setName}
-              />
-
-              <AddressLookup
+              {/* Name + city are typed here and the address comes back from
+                  the lookup — the address/state fields below are a fallback
+                  and a chance to correct, not the primary way in. */}
+              <VenueLookup
+                name={name}
                 city={city}
-                onPick={(s) => {
+                onChangeName={setName}
+                onChangeCity={setCity}
+                labelStyle={styles.fieldLabel}
+                onAccept={(s) => {
+                  if (s.name) setName(s.name);
                   setAddress(s.address);
                   setCity(s.city);
                   if (s.state) setStateCode(s.state);
                   setPickedCoords({ lat: s.lat, lng: s.lng });
+                  // Contact details are a bonus when OSM has them. Fill only
+                  // what is still blank — someone who already typed the bar's
+                  // number knows it better than OSM does.
+                  setPhone((prev) => prev || s.phone || '');
+                  setWebsite((prev) => prev || s.website || '');
+                  setInstagram((prev) => prev || s.instagram || '');
                 }}
               />
 
               <Text style={styles.fieldLabel}>Address *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="123 Main St"
+                placeholder="Filled in by the lookup, or type it"
                 placeholderTextColor={Colors.textMute}
                 value={address}
                 onChangeText={(t) => {
                   setAddress(t);
-                  // Hand-edited after picking: the coordinates no longer
+                  // Hand-edited after accepting: the coordinates no longer
                   // describe what is in the field, so let the server geocode.
                   setPickedCoords(null);
                 }}
-              />
-
-              <Text style={styles.fieldLabel}>City *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Cocoa Beach"
-                placeholderTextColor={Colors.textMute}
-                value={city}
-                onChangeText={setCity}
               />
 
               <Text style={styles.fieldLabel}>State (optional)</Text>
@@ -561,9 +557,9 @@ export default function AddSpotScreen() {
                 autoCapitalize="characters"
                 maxLength={10}
               />
-
-              <Text style={styles.fieldLabel}>Karaoke nights</Text>
-              <NightsRow nights={nights} onToggle={toggleNight} />
+              {/* No nights picker here — this card describes the venue, and
+                  the one in Show Details below is bound to the same state and
+                  shown for both flows. Two of them was always a mirror. */}
             </Card>
           </>
         )}

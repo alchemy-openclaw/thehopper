@@ -167,8 +167,11 @@ export interface StripeStatusResponse {
   missing_info?: string[];
 }
 
-/** One pickable result from the address lookup on the venue/show forms. */
-export interface AddressSuggestion {
+/** One pickable result from the venue lookup on the submission forms. */
+export interface VenueSuggestion {
+  /** The place's own name as OSM has it, when it has one. */
+  name: string | null;
+  /** "<street>, <city>, <ST> <zip>" for display. */
   label: string;
   address: string;
   city: string;
@@ -176,6 +179,10 @@ export interface AddressSuggestion {
   postcode: string | null;
   lat: number;
   lng: number;
+  /** Contact details when OSM carries them — often null, never depended on. */
+  phone: string | null;
+  website: string | null;
+  instagram: string | null;
 }
 
 export const DIFFICULTY_LABELS: Record<number, { label: string; emoji: string }> = {

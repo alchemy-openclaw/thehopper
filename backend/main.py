@@ -1674,50 +1674,95 @@ def list_submissions(status: str | None = Query(None, description="Filter by sta
     return [dict(r) for r in rows]
 
 
-class AddressSuggestion(BaseModel):
-    """One pickable result from the Add Show / Add Venue address lookup.
+def _first_tag(tags: dict[str, Any], *keys: str) -> str | None:
+    """First non-empty value among several OSM keys.
 
-    Split into the same fields the forms already have, so picking a result is
-    a straight prefill — the user can still edit every one of them afterwards.
+    OSM records contact details under two competing conventions — bare
+    `phone`/`website` and the newer `contact:*` prefix — and real data uses
+    both, sometimes on the same object. Callers pass every spelling they know.
+    """
+    for k in keys:
+        v = (tags.get(k) or "").strip()
+        if v:
+            return v
+    return None
+
+
+def _instagram_handle(raw: str | None) -> str | None:
+    """Normalise an OSM instagram tag to a bare handle.
+
+    The tag is sometimes a full URL, sometimes "@handle", sometimes bare, and
+    the form stores handles — so strip it down to the one shape.
+    """
+    if not raw:
+        return None
+    v = raw.strip().rstrip("/")
+    for prefix in ("https://", "http://"):
+        if v.lower().startswith(prefix):
+            v = v[len(prefix):]
+    for prefix in ("www.", "instagram.com/", "m.instagram.com/"):
+        if v.lower().startswith(prefix):
+            v = v[len(prefix):]
+    v = v.split("?")[0].lstrip("@").strip("/")
+    # A leftover slash means it was a deep link, not a profile.
+    return v or None if "/" not in v else None
+
+
+class VenueSuggestion(BaseModel):
+    """One pickable result from the Add Show / Add Venue venue lookup.
+
+    Split into the same fields the forms already have, so accepting a result
+    is a straight prefill — every field stays editable afterwards.
     """
 
-    label: str          # full one-line display string
-    address: str        # house number + street, or the venue/POI name
+    name: str | None = None  # the place's own name, when OSM has one
+    label: str               # "<street>, <city>, <ST> <zip>" for display
+    address: str             # house number + street
     city: str
     state: str | None = None
     postcode: str | None = None
     lat: float
     lng: float
+    # Contact details, when OSM happens to carry them. Coverage is patchy —
+    # roughly half the bars we tested have any at all — so these are a bonus
+    # that saves typing, never something the form can depend on.
+    phone: str | None = None
+    website: str | None = None
+    instagram: str | None = None
 
 
-@app.get(f"{API_PREFIX}/geocode/search", response_model=list[AddressSuggestion])
-def geocode_search(
-    q: str = Query(..., min_length=3, description="Free-text address or venue name"),
+@app.get(f"{API_PREFIX}/venues/lookup", response_model=list[VenueSuggestion])
+def venue_lookup(
+    name: str = Query(..., min_length=2, description="The venue's name, as the submitter knows it"),
+    city: str | None = Query(None, description="City to search in"),
     lat: float | None = Query(None, description="Anchor latitude to bias results"),
     lng: float | None = Query(None, description="Anchor longitude to bias results"),
-    city: str | None = Query(None, description="Fallback anchor when no coords"),
     limit: int = Query(6, ge=1, le=10),
 ):
-    """Look up an address so a submitter picks it instead of typing it.
+    """Find a place by the two things a submitter already knows: name and city.
 
-    Results are biased toward an anchor rather than restricted to it: a KJ
-    standing in one town may well be adding a show one town over, so a
-    viewbox that boosts nearby hits without dropping distant ones is the
-    behaviour we want. The anchor cascades lat/lng -> city -> the same
-    DEFAULT_SEARCH_COORDS a bare /api/venues request falls back to.
+    This is the whole point of the feature — nobody adding "Coconuts on the
+    Beach in Cocoa Beach" should have to look up that it sits at 2 Minutemen
+    Causeway. The street address, state and coordinates come back from the
+    lookup and prefill the form.
+
+    The city goes into the query text rather than being geocoded separately:
+    Nominatim resolves "<name>, <city>" well on its own, and a second call
+    just to derive a viewbox would double the cost of every search. The
+    lat/lng anchor (a remembered GPS fix) still biases results, and falls back
+    to the same DEFAULT_SEARCH_COORDS a bare /api/venues request uses.
+
+    Results are biased toward the anchor, never restricted to it — a KJ
+    standing in one town may well be adding a show one town over.
 
     Deliberately not wired to per-keystroke autocomplete: Nominatim's usage
     policy forbids it, which is why the client searches on demand.
     """
-    anchor: tuple[float, float] | None = None
-    if lat is not None and lng is not None:
-        anchor = (lat, lng)
-    elif city and city.strip():
-        c_lat, c_lng = _geocode(city.strip())
-        if c_lat is not None and c_lng is not None:
-            anchor = (c_lat, c_lng)
-    if anchor is None:
-        anchor = DEFAULT_SEARCH_COORDS
+    query = name.strip()
+    if city and city.strip():
+        query = f"{query}, {city.strip()}"
+
+    anchor = (lat, lng) if lat is not None and lng is not None else DEFAULT_SEARCH_COORDS
 
     # ~35 miles of latitude either way; longitude is widened by the cosine of
     # the latitude so the box stays roughly square on the ground.
@@ -1729,9 +1774,11 @@ def geocode_search(
         results = _nominatim(
             "search",
             {
-                "q": q.strip(),
+                "q": query,
                 "format": "jsonv2",
                 "addressdetails": 1,
+                # Where the phone/website/instagram live.
+                "extratags": 1,
                 "limit": limit,
                 "countrycodes": "us",
                 "viewbox": viewbox,
@@ -1742,24 +1789,26 @@ def geocode_search(
     except Exception:
         raise HTTPException(
             status_code=503,
-            detail="Address lookup is unavailable right now — enter the address manually.",
+            detail="Venue lookup is unavailable right now — enter the address manually.",
         )
 
-    out: list[AddressSuggestion] = []
+    out: list[VenueSuggestion] = []
     seen: set[str] = set()
     for r in results or []:
         a = r.get("address", {}) or {}
         house = (a.get("house_number") or "").strip()
         road = (a.get("road") or "").strip()
-        name = (r.get("name") or "").strip()
+        # Shadowing the `name` query param here would be a trap; this is the
+        # name OSM has for the place, not the one the submitter typed.
+        place_name = (r.get("name") or "").strip()
         # A result matched by venue name ("Cocoa Beach Pier") carries the road
         # it sits on but no house number of its own. Preferring the road there
-        # would hand the KJ "Meade Avenue" for the pier they actually searched,
-        # so the POI name wins whenever there is no street number to pair.
+        # would hand the submitter "Meade Avenue" for the pier they actually
+        # searched, so the place name stands in when there is no street number.
         if house and road:
             street = f"{house} {road}"
         else:
-            street = name or road
+            street = place_name or road
         city_name = (
             a.get("city") or a.get("town") or a.get("village")
             or a.get("hamlet") or a.get("suburb") or ""
@@ -1777,15 +1826,22 @@ def geocode_search(
         label = ", ".join(p for p in (street, city_name, state_code) if p)
         if postcode:
             label += f" {postcode}"
-        # OSM regularly carries the same address as several nodes a few metres
+        # OSM regularly carries the same place as several nodes a few metres
         # apart; two identical rows in the picker is just a worse picker.
-        dedupe_key = label.lower()
+        dedupe_key = f"{place_name}|{label}".lower()
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
+        tags = r.get("extratags") or {}
         out.append(
-            AddressSuggestion(
+            VenueSuggestion(
+                name=place_name or None,
                 label=label,
+                phone=_first_tag(tags, "phone", "contact:phone", "telephone"),
+                website=_first_tag(tags, "website", "contact:website", "url"),
+                instagram=_instagram_handle(
+                    _first_tag(tags, "contact:instagram", "instagram")
+                ),
                 address=street,
                 city=city_name,
                 state=state_code,

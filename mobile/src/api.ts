@@ -14,7 +14,7 @@ import type {
   VenueSubmission,
   VenueSubmissionResponse,
   VocalRange,
-  AddressSuggestion,
+  VenueSuggestion,
 } from './types';
 
 /**
@@ -49,15 +49,47 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Render a FastAPI `detail` as a readable sentence.
+ *
+ * It is a plain string for the errors we raise by hand, but a 422 from request
+ * validation returns an array of {loc, msg, type} objects. Assigning that
+ * straight to an Error message renders as "[object Object]", which tells the
+ * user nothing and hides the actual failure from us too.
+ */
+function describeDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => {
+        if (typeof d === 'string') return d;
+        if (d && typeof d === 'object' && 'msg' in d) {
+          const { msg, loc } = d as { msg?: unknown; loc?: unknown };
+          const field = Array.isArray(loc) ? loc[loc.length - 1] : undefined;
+          return field ? `${field}: ${String(msg)}` : String(msg);
+        }
+        return null;
+      })
+      .filter((m): m is string => !!m);
+    if (msgs.length) return msgs.join('; ');
+  }
+  if (detail && typeof detail === 'object') {
+    const { msg } = detail as { msg?: unknown };
+    if (typeof msg === 'string') return msg;
+  }
+  return fallback;
+}
+
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
-    let detail = `${res.status} ${res.statusText}`;
+    const fallback = `${res.status} ${res.statusText}`;
+    let detail = fallback;
     try {
       const body = await res.json();
-      if (body.detail) detail = body.detail;
+      if (body?.detail != null) detail = describeDetail(body.detail, fallback);
     } catch {
-      /* ignore */
+      /* non-JSON body — the status line is all we have */
     }
     throw new ApiError(res.status, detail);
   }
@@ -254,17 +286,18 @@ export const api = {
   // --- Venue submission (add a karaoke spot) ---
 
   /**
-   * Look up a free-text address, biased toward an anchor. Deliberately called
-   * on demand rather than per keystroke — Nominatim's usage policy forbids
-   * autocomplete, and the backend throttles to one request a second.
+   * Find a venue by name + city, so the submitter never has to look up its
+   * street address. Called on demand rather than per keystroke — Nominatim's
+   * usage policy forbids autocomplete, and the backend throttles to one
+   * request a second.
    */
-  geocodeSearch: (q: string, anchor?: { lat: number; lng: number } | null, city?: string) =>
-    jsonFetch<AddressSuggestion[]>(
-      withQuery(`${API_BASE}/geocode/search`, {
-        q,
+  venueLookup: (name: string, city?: string, anchor?: { lat: number; lng: number } | null) =>
+    jsonFetch<VenueSuggestion[]>(
+      withQuery(`${API_BASE}/venues/lookup`, {
+        name,
+        city: city?.trim() || undefined,
         lat: anchor ? String(anchor.lat) : undefined,
         lng: anchor ? String(anchor.lng) : undefined,
-        city: city?.trim() || undefined,
       }),
     ),
 
