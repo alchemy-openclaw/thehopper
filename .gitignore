@@ -9,3 +9,4 @@ __pycache__/
 # per-machine artifacts — never commit (see 6eae4e9)
 backend/venv/
 frontend/node_modules/
+backend/thehopper.db
