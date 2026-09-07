@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { ReactNode } from 'react';
 import { Colors, Radius, Shadows, Spacing, TAP_HEIGHT, Typography } from './theme';
+import { DAYS, dayAbbrev } from './days';
 import type { Song } from './types';
 import { DIFFICULTY_LABELS } from './types';
 
@@ -46,14 +47,59 @@ export function Card({ children, style }: { children: ReactNode; style?: object 
 
 // ---------- MetaPill ----------
 
-export function MetaPill({
-  label,
-  variant = 'default',
+export function MetaPill({ label }: { label: string }) {
+  return <View style={styles.pill}><Text style={styles.pillText}>{label}</Text></View>;
+}
+
+// ---------- NightsRow ----------
+
+/**
+ * The full week as seven two-letter chips, with the venue's karaoke nights
+ * lit up. One component for both jobs: read-only on the event list/detail
+ * cards, and tappable on the Add Show / Add Venue forms.
+ *
+ * Showing all seven (rather than only the active nights) is what keeps it to
+ * a single row at a predictable width — the strip never reflows as venues
+ * gain or lose nights, and an empty night reads as "not this one" instead of
+ * simply being absent.
+ */
+export function NightsRow({
+  nights,
+  onToggle,
+  style,
 }: {
-  label: string;
-  variant?: 'default' | 'nights';
+  nights: readonly string[];
+  onToggle?: (day: string) => void;
+  style?: object;
 }) {
-  return <View style={[styles.pill, variant === 'nights' && styles.pillNights]}><Text style={styles.pillText}>{label}</Text></View>;
+  const interactive = !!onToggle;
+  return (
+    <View style={[styles.nightsRow, style]}>
+      {DAYS.map((day) => {
+        const on = nights.includes(day);
+        return (
+          <Pressable
+            key={day}
+            onPress={onToggle ? () => onToggle(day) : undefined}
+            disabled={!interactive}
+            accessibilityRole={interactive ? 'checkbox' : undefined}
+            accessibilityState={interactive ? { checked: on } : undefined}
+            accessibilityLabel={day}
+            style={({ pressed }) => [
+              styles.dayChip,
+              interactive && styles.dayChipTappable,
+              on && styles.dayChipOn,
+              pressed && interactive && styles.dayChipPressed,
+            ]}
+          >
+            <Text style={[styles.dayChipText, on && styles.dayChipTextOn]}>
+              {dayAbbrev(day)}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 // ---------- Banner ----------
@@ -265,15 +311,41 @@ const styles = StyleSheet.create({
     marginRight: 6,
     marginTop: 6,
   },
-  pillNights: {
-    backgroundColor: 'rgba(249, 248, 113, 0.08)',
-    borderColor: 'rgba(249, 248, 113, 0.35)',
-  },
   pillText: {
     color: Colors.textDim,
     fontSize: 12,
     fontWeight: '600',
   },
+  nightsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 4,
+    marginTop: 6,
+  },
+  dayChip: {
+    // flex:1 over a fixed width is what guarantees the seven chips share the
+    // row evenly on any screen instead of wrapping on a narrow one.
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.bg2,
+    borderRadius: Radius.sm,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Only the form variant needs a 44pt target; the list cards stay compact.
+  dayChipTappable: {
+    minHeight: 44,
+    paddingVertical: 10,
+  },
+  dayChipOn: {
+    backgroundColor: 'rgba(196, 86, 141, 0.22)',
+    borderColor: Colors.pink,
+  },
+  dayChipPressed: { opacity: 0.85 },
+  dayChipText: { color: Colors.textMute, fontSize: 13, fontWeight: '600' },
+  dayChipTextOn: { color: Colors.text, fontWeight: '800' },
   banner: {
     borderRadius: Radius.sm,
     paddingHorizontal: 14,

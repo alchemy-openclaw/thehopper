@@ -28,6 +28,7 @@ import {
   Card,
   Loading,
   MetaPill,
+  NightsRow,
   EmptyState,
 } from '../../src/components';
 import { Colors, Spacing, Typography } from '../../src/theme';
@@ -512,10 +513,8 @@ export default function KJProfileScreen({ kjIdOverride }: { kjIdOverride?: numbe
           <Card key={v.id}>
             <Text style={styles.venueName}>{v.name}</Text>
             <Text style={styles.venueCity}>{v.city}</Text>
+            <NightsRow nights={v.karaoke_nights} />
             <View style={styles.venueMeta}>
-              {v.karaoke_nights.map((n) => (
-                <MetaPill key={n} label={n} variant="nights" />
-              ))}
               <MetaPill label={formatTimeRange(v.start_time, v.end_time)} />
             </View>
             {v.vibe ? <Text style={styles.venueVibe}>{v.vibe}</Text> : null}

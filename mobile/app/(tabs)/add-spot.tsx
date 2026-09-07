@@ -15,7 +15,8 @@ import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { getSessionToken, setSessionToken } from '../../src/session';
 import { api, API_BASE } from '../../src/api';
-import { getGeolocation } from '../../src/location';
+import { getGeolocationCached } from '../../src/geo';
+import { AddressLookup } from '../../src/address-lookup';
 import { useKJContext } from '../../src/kj-context';
 import type { KJ, Venue } from '../../src/types';
 import {
@@ -23,10 +24,10 @@ import {
   Button,
   Card,
   Loading,
+  NightsRow,
 } from '../../src/components';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 /**
  * Mirror of the backend's normalize_phone, used only to decide whether the KJ
@@ -54,6 +55,9 @@ export default function AddSpotScreen() {
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [stateCode, setStateCode] = useState('');
+  // Coordinates from a picked address-lookup result, sent with the submission
+  // so the backend does not re-geocode text the user may since have edited.
+  const [pickedCoords, setPickedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [nights, setNights] = useState<string[]>([]);
   const [startTime, setStartTime] = useState('20:00');
   const [endTime, setEndTime] = useState('00:00');
@@ -260,7 +264,7 @@ export default function AddSpotScreen() {
     setLocationError(null);
     setLocating(true);
     try {
-      const { lat, lng } = await getGeolocation();
+      const { lat, lng } = await getGeolocationCached();
       const res = await api.nearbyLookup(lat, lng);
       setNearbyVenues(res.nearby_venues);
       setAddressHint(res.address_hint);
@@ -339,6 +343,8 @@ export default function AddSpotScreen() {
           ? (existingKJ ? existingKJ.phone : submitterPhone.trim())
           : undefined,
         existing_venue_id: usingPickedVenue ? matchedVenue!.id : undefined,
+        lat: !usingPickedVenue && pickedCoords ? pickedCoords.lat : undefined,
+        lng: !usingPickedVenue && pickedCoords ? pickedCoords.lng : undefined,
       });
       setSuccess(res.message);
 
@@ -512,13 +518,28 @@ export default function AddSpotScreen() {
                 onChangeText={setName}
               />
 
+              <AddressLookup
+                city={city}
+                onPick={(s) => {
+                  setAddress(s.address);
+                  setCity(s.city);
+                  if (s.state) setStateCode(s.state);
+                  setPickedCoords({ lat: s.lat, lng: s.lng });
+                }}
+              />
+
               <Text style={styles.fieldLabel}>Address *</Text>
               <TextInput
                 style={styles.input}
                 placeholder="123 Main St"
                 placeholderTextColor={Colors.textMute}
                 value={address}
-                onChangeText={setAddress}
+                onChangeText={(t) => {
+                  setAddress(t);
+                  // Hand-edited after picking: the coordinates no longer
+                  // describe what is in the field, so let the server geocode.
+                  setPickedCoords(null);
+                }}
               />
 
               <Text style={styles.fieldLabel}>City *</Text>
@@ -542,28 +563,7 @@ export default function AddSpotScreen() {
               />
 
               <Text style={styles.fieldLabel}>Karaoke nights</Text>
-              <View style={styles.nightsRow}>
-                {DAYS.map((day) => (
-                  <Pressable
-                    key={day}
-                    onPress={() => toggleNight(day)}
-                    style={({ pressed }) => [
-                      styles.dayChip,
-                      nights.includes(day) && styles.dayChipActive,
-                      pressed && styles.dayChipPressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.dayChipText,
-                        nights.includes(day) && styles.dayChipTextActive,
-                      ]}
-                    >
-                      {day.slice(0, 3)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
+              <NightsRow nights={nights} onToggle={toggleNight} />
             </Card>
           </>
         )}
@@ -572,28 +572,7 @@ export default function AddSpotScreen() {
         <Text style={styles.sectionLabel}>Show Details</Text>
         <Card>
           <Text style={styles.fieldLabel}>Karaoke nights</Text>
-          <View style={styles.nightsRow}>
-            {DAYS.map((day) => (
-              <Pressable
-                key={day}
-                onPress={() => toggleNight(day)}
-                style={({ pressed }) => [
-                  styles.dayChip,
-                  nights.includes(day) && styles.dayChipActive,
-                  pressed && styles.dayChipPressed,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.dayChipText,
-                    nights.includes(day) && styles.dayChipTextActive,
-                  ]}
-                >
-                  {day.slice(0, 3)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          <NightsRow nights={nights} onToggle={toggleNight} />
 
           <View style={styles.timeRow}>
             <View style={{ flex: 1 }}>
@@ -959,30 +938,6 @@ const styles = StyleSheet.create({
     minHeight: 80,
     paddingVertical: 10,
   },
-  nightsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 4,
-  },
-  dayChip: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.bg2,
-    borderRadius: Radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayChipActive: {
-    backgroundColor: Colors.pink,
-    borderColor: 'transparent',
-  },
-  dayChipPressed: { opacity: 0.85 },
-  dayChipText: { color: Colors.textDim, fontSize: 14, fontWeight: '600' },
-  dayChipTextActive: { color: '#fff', fontWeight: '700' },
   timeRow: { flexDirection: 'row' },
   toggleCard: { marginTop: Spacing.md },
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },

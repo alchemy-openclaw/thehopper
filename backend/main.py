@@ -23,7 +23,9 @@ import secrets
 import smtplib
 import sqlite3
 import string
+import threading
 import time
+from collections import OrderedDict
 from contextlib import contextmanager
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -569,6 +571,87 @@ US_STATE_NAMES = {
     "VERMONT": "VT", "VIRGINIA": "VA", "WASHINGTON": "WA",
     "WEST VIRGINIA": "WV", "WISCONSIN": "WI", "WYOMING": "WY",
 }
+
+
+# ---------------------------------------------------------------------------
+# Nominatim (OpenStreetMap) geocoding
+# ---------------------------------------------------------------------------
+#
+# Everything that talks to Nominatim goes through _nominatim(). Their usage
+# policy caps us at one request per second for the whole application, so the
+# throttle has to be global rather than per-request-handler — and now that the
+# mobile address lookup lets a user trigger searches by hand, the three
+# fire-and-forget submission geocodes are no longer the only callers.
+#
+# The cache matters as much as the throttle: address lookup is repetitive by
+# nature (a KJ retypes the same street, several KJs add shows at the same bar)
+# and a cached hit skips the second of wall-clock the throttle would cost.
+
+NOMINATIM_BASE = "https://nominatim.openstreetmap.org"
+NOMINATIM_UA = "TheHopper/1.0"
+_NOMINATIM_MIN_INTERVAL = 1.1  # seconds between calls; policy is 1/sec
+_NOMINATIM_CACHE_TTL = 24 * 60 * 60  # addresses do not move
+_NOMINATIM_CACHE_MAX = 512
+
+_nominatim_lock = threading.Lock()
+_nominatim_last_call = 0.0
+_nominatim_cache: "OrderedDict[str, tuple[float, Any]]" = OrderedDict()
+
+
+def _nominatim(endpoint: str, params: dict[str, Any], timeout: float = 8.0) -> Any:
+    """Call Nominatim, respecting the 1 req/sec policy. Returns parsed JSON.
+
+    Raises on transport errors; callers decide whether a failed geocode is
+    fatal (the interactive lookup) or ignorable (submission prefill).
+    """
+    global _nominatim_last_call
+
+    query = urlencode({k: v for k, v in params.items() if v not in (None, "")})
+    key = f"{endpoint}?{query}"
+
+    with _nominatim_lock:
+        hit = _nominatim_cache.get(key)
+        if hit and time.time() - hit[0] < _NOMINATIM_CACHE_TTL:
+            _nominatim_cache.move_to_end(key)
+            return hit[1]
+
+        # Held across the request on purpose: the interval is only meaningful
+        # if concurrent callers queue behind each other rather than all
+        # sleeping the same 1.1s and then firing together.
+        wait = _NOMINATIM_MIN_INTERVAL - (time.monotonic() - _nominatim_last_call)
+        if wait > 0:
+            time.sleep(wait)
+
+        req = UrllibRequest(f"{NOMINATIM_BASE}/{endpoint}?{query}")
+        req.add_header("User-Agent", NOMINATIM_UA)
+        try:
+            with urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read())
+        finally:
+            _nominatim_last_call = time.monotonic()
+
+        _nominatim_cache[key] = (time.time(), data)
+        _nominatim_cache.move_to_end(key)
+        while len(_nominatim_cache) > _NOMINATIM_CACHE_MAX:
+            _nominatim_cache.popitem(last=False)
+        return data
+
+
+def _geocode(query: str) -> tuple[float | None, float | None]:
+    """Best-effort forward geocode. Returns (None, None) rather than raising.
+
+    Used by the submission paths, where a missing coordinate is something an
+    admin fixes later and must never block accepting the venue.
+    """
+    if not query.strip():
+        return None, None
+    try:
+        results = _nominatim("search", {"q": query, "format": "json", "limit": 1})
+        if results:
+            return float(results[0]["lat"]), float(results[0]["lon"])
+    except Exception:
+        pass
+    return None, None
 
 
 def _state_from_address(address: str | None) -> str | None:
@@ -1189,6 +1272,11 @@ class VenueSubmissionRequest(BaseModel):
     # picker (At Current Location flow). Bypasses fuzzy matching — the show
     # is merged straight into that venue row.
     existing_venue_id: int | None = None
+    # Set when the submitter picked a result from the address lookup. Better
+    # than re-geocoding the text they can still have edited afterwards, and it
+    # skips a Nominatim round-trip on the submit path.
+    lat: float | None = None
+    lng: float | None = None
 
 
 class VenueSubmissionResponse(BaseModel):
@@ -1586,6 +1674,129 @@ def list_submissions(status: str | None = Query(None, description="Filter by sta
     return [dict(r) for r in rows]
 
 
+class AddressSuggestion(BaseModel):
+    """One pickable result from the Add Show / Add Venue address lookup.
+
+    Split into the same fields the forms already have, so picking a result is
+    a straight prefill — the user can still edit every one of them afterwards.
+    """
+
+    label: str          # full one-line display string
+    address: str        # house number + street, or the venue/POI name
+    city: str
+    state: str | None = None
+    postcode: str | None = None
+    lat: float
+    lng: float
+
+
+@app.get(f"{API_PREFIX}/geocode/search", response_model=list[AddressSuggestion])
+def geocode_search(
+    q: str = Query(..., min_length=3, description="Free-text address or venue name"),
+    lat: float | None = Query(None, description="Anchor latitude to bias results"),
+    lng: float | None = Query(None, description="Anchor longitude to bias results"),
+    city: str | None = Query(None, description="Fallback anchor when no coords"),
+    limit: int = Query(6, ge=1, le=10),
+):
+    """Look up an address so a submitter picks it instead of typing it.
+
+    Results are biased toward an anchor rather than restricted to it: a KJ
+    standing in one town may well be adding a show one town over, so a
+    viewbox that boosts nearby hits without dropping distant ones is the
+    behaviour we want. The anchor cascades lat/lng -> city -> the same
+    DEFAULT_SEARCH_COORDS a bare /api/venues request falls back to.
+
+    Deliberately not wired to per-keystroke autocomplete: Nominatim's usage
+    policy forbids it, which is why the client searches on demand.
+    """
+    anchor: tuple[float, float] | None = None
+    if lat is not None and lng is not None:
+        anchor = (lat, lng)
+    elif city and city.strip():
+        c_lat, c_lng = _geocode(city.strip())
+        if c_lat is not None and c_lng is not None:
+            anchor = (c_lat, c_lng)
+    if anchor is None:
+        anchor = DEFAULT_SEARCH_COORDS
+
+    # ~35 miles of latitude either way; longitude is widened by the cosine of
+    # the latitude so the box stays roughly square on the ground.
+    d_lat = 0.5
+    d_lng = 0.5 / max(math.cos(math.radians(anchor[0])), 0.1)
+    viewbox = f"{anchor[1] - d_lng},{anchor[0] - d_lat},{anchor[1] + d_lng},{anchor[0] + d_lat}"
+
+    try:
+        results = _nominatim(
+            "search",
+            {
+                "q": q.strip(),
+                "format": "jsonv2",
+                "addressdetails": 1,
+                "limit": limit,
+                "countrycodes": "us",
+                "viewbox": viewbox,
+                # bounded=0: bias toward the box, do not clip to it.
+                "bounded": 0,
+            },
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Address lookup is unavailable right now — enter the address manually.",
+        )
+
+    out: list[AddressSuggestion] = []
+    seen: set[str] = set()
+    for r in results or []:
+        a = r.get("address", {}) or {}
+        house = (a.get("house_number") or "").strip()
+        road = (a.get("road") or "").strip()
+        name = (r.get("name") or "").strip()
+        # A result matched by venue name ("Cocoa Beach Pier") carries the road
+        # it sits on but no house number of its own. Preferring the road there
+        # would hand the KJ "Meade Avenue" for the pier they actually searched,
+        # so the POI name wins whenever there is no street number to pair.
+        if house and road:
+            street = f"{house} {road}"
+        else:
+            street = name or road
+        city_name = (
+            a.get("city") or a.get("town") or a.get("village")
+            or a.get("hamlet") or a.get("suburb") or ""
+        ).strip()
+        if not street or not city_name:
+            continue  # unusable for a form that requires address + city
+        state_code = None
+        raw_state = (a.get("state") or "").strip()
+        if raw_state:
+            state_code = US_STATE_NAMES.get(raw_state.upper()) or (
+                raw_state.upper() if raw_state.upper() in US_STATES else None
+            )
+        postcode = (a.get("postcode") or "").strip() or None
+
+        label = ", ".join(p for p in (street, city_name, state_code) if p)
+        if postcode:
+            label += f" {postcode}"
+        # OSM regularly carries the same address as several nodes a few metres
+        # apart; two identical rows in the picker is just a worse picker.
+        dedupe_key = label.lower()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        out.append(
+            AddressSuggestion(
+                label=label,
+                address=street,
+                city=city_name,
+                state=state_code,
+                postcode=postcode,
+                lat=float(r["lat"]),
+                lng=float(r["lon"]),
+            )
+        )
+    return out
+
+
 # NOTE: must be declared before /venues/{venue_id} — that route types
 # venue_id as int, so "nearby-lookup" would 422 instead of matching here.
 class NearbyLookupResponse(BaseModel):
@@ -1633,15 +1844,11 @@ def nearby_lookup(lat: float, lng: float):
 
     address_hint = None
     try:
-        import urllib.parse as up
-        rev_url = (
-            "https://nominatim.openstreetmap.org/reverse?"
-            f"lat={up.quote(str(lat))}&lon={up.quote(str(lng))}&format=json&zoom=18&addressdetails=1"
+        data = _nominatim(
+            "reverse",
+            {"lat": lat, "lon": lng, "format": "json", "zoom": 18, "addressdetails": 1},
+            timeout=5.0,
         )
-        rev_req = UrllibRequest(rev_url)
-        rev_req.add_header("User-Agent", "TheHopper/1.0")
-        with urlopen(rev_req, timeout=5) as resp:
-            data = json.loads(resp.read())
         addr = data.get("address", {})
         house = addr.get("house_number", "")
         road = addr.get("road", "")
@@ -3152,22 +3359,13 @@ def submit_venue(req: VenueSubmissionRequest):
     # Geocode the address (simple approach — just store nulls if it fails).
     # State is appended when the client supplied it; the old hardcoded
     # ", FL" broke every submission outside Florida.
-    lat, lng = None, None
-    try:
-        import urllib.parse as up
+    if req.lat is not None and req.lng is not None:
+        lat, lng = req.lat, req.lng  # picked from the address lookup
+    else:
         geo_q = req.address + ", " + req.city
         if req.state:
             geo_q += ", " + req.state
-        geocode_url = f"https://nominatim.openstreetmap.org/search?q={up.quote(geo_q)}&format=json&limit=1"
-        geo_req = UrllibRequest(geocode_url)
-        geo_req.add_header("User-Agent", "TheHopper/1.0")
-        with urlopen(geo_req, timeout=10) as resp:
-            results = json.loads(resp.read())
-            if results:
-                lat = float(results[0]["lat"])
-                lng = float(results[0]["lon"])
-    except Exception:
-        pass  # Geocoding is optional — admin can fix later
+        lat, lng = _geocode(geo_q)  # optional — admin can fix later
 
     # Canonicalization: check for duplicates before accepting.
     #
@@ -3598,6 +3796,10 @@ class KJAddVenueRequest(BaseModel):
     website: str | None = None
     instagram: str | None = None
     vibe: str | None = None
+    state: str | None = None
+    # Supplied when the KJ picked a result from the address lookup.
+    lat: float | None = None
+    lng: float | None = None
 
 
 class KJAddVenueResponse(BaseModel):
@@ -3624,19 +3826,21 @@ def kj_add_venue(kj_id: int, req: KJAddVenueRequest):
         raise HTTPException(status_code=400, detail="Name, address, and city are required")
 
     # Geocode
-    lat, lng = None, None
-    try:
-        import urllib.parse as up
-        geocode_url = f"https://nominatim.openstreetmap.org/search?q={up.quote(req.address + ', ' + req.city + ', FL')}&format=json&limit=1"
-        geo_req = UrllibRequest(geocode_url)
-        geo_req.add_header("User-Agent", "TheHopper/1.0")
-        with urlopen(geo_req, timeout=10) as resp:
-            results = json.loads(resp.read())
-            if results:
-                lat = float(results[0]["lat"])
-                lng = float(results[0]["lon"])
-    except Exception:
-        pass
+    if req.lat is not None and req.lng is not None:
+        lat, lng = req.lat, req.lng  # picked from the address lookup
+    else:
+        # The old hardcoded ", FL" here mis-geocoded every venue outside
+        # Florida; fall back to a state parsed off the address when the client
+        # did not send one.
+        geo_q = f"{req.address}, {req.city}"
+        state = (
+            req.state
+            or _state_from_address(req.address)
+            or _state_from_address(req.city)
+        )
+        if state:
+            geo_q += f", {state}"
+        lat, lng = _geocode(geo_q)
 
     # Canonicalization check
     with db() as conn:

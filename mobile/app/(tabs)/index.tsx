@@ -13,7 +13,7 @@ import {
 import { router } from 'expo-router';
 import type { AppConfig, Venue } from '../../src/types';
 import { api } from '../../src/api';
-import { getGeolocation } from '../../src/prefs';
+import { getGeolocationCached } from '../../src/geo';
 import { daysUntilNextEvent, eventDayLabel, hasEventSoon } from '../../src/event-window';
 import { formatTime12h, formatTimeRange } from '../../src/format';
 import { useVenueContext } from '../../src/venue-context';
@@ -24,6 +24,7 @@ import {
   EmptyState,
   Loading,
   MetaPill,
+  NightsRow,
 } from '../../src/components';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
@@ -90,7 +91,7 @@ export default function VenuesScreen() {
   const handleLocate = async () => {
     setError(null);
     try {
-      const { lat, lng } = await getGeolocation();
+      const { lat, lng } = await getGeolocationCached();
       setLastLocation({ lat, lng });
       setFilter({ kind: 'near' });
       setCity('');
@@ -381,10 +382,9 @@ function VenueCard({
         </Text>
       )}
 
+      <NightsRow nights={venue.karaoke_nights} />
+
       <View style={styles.venueMeta}>
-        {venue.karaoke_nights.map((n) => (
-          <MetaPill key={n} label={n} variant="nights" />
-        ))}
         <MetaPill label={formatTimeRange(venue.start_time, venue.end_time)} />
         {venue.kj_name && <MetaPill label={`KJ: ${venue.kj_name}`} />}
       </View>

@@ -21,10 +21,9 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { api } from '../../../src/api';
-import { Button, Card, Banner, Loading } from '../../../src/components';
+import { Button, Card, Banner, Loading, NightsRow } from '../../../src/components';
+import { AddressLookup } from '../../../src/address-lookup';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../../src/theme';
-
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function KJAddVenueScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,6 +32,10 @@ export default function KJAddVenueScreen() {
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
+  // State + coordinates come from a picked address-lookup result; this form
+  // has no state field of its own, so a pick is the only way they get set.
+  const [stateCode, setStateCode] = useState('');
+  const [pickedCoords, setPickedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [nights, setNights] = useState<string[]>([]);
   const [startTime, setStartTime] = useState('20:00');
   const [endTime, setEndTime] = useState('00:00');
@@ -68,6 +71,9 @@ export default function KJAddVenueScreen() {
         phone: phone.trim() || undefined,
         website: website.trim() || undefined,
         vibe: vibe.trim() || undefined,
+        state: stateCode || undefined,
+        lat: pickedCoords?.lat,
+        lng: pickedCoords?.lng,
       });
       setResult({ status: res.status, message: res.message });
     } catch (e) {
@@ -139,13 +145,27 @@ export default function KJAddVenueScreen() {
             onChangeText={setName}
           />
 
+          <AddressLookup
+            city={city}
+            onPick={(s) => {
+              setAddress(s.address);
+              setCity(s.city);
+              setStateCode(s.state ?? '');
+              setPickedCoords({ lat: s.lat, lng: s.lng });
+            }}
+          />
+
           <Text style={styles.label}>address *</Text>
           <TextInput
             style={styles.input}
             placeholder="123 main st"
             placeholderTextColor={Colors.textMute}
             value={address}
-            onChangeText={setAddress}
+            onChangeText={(t) => {
+              setAddress(t);
+              // Hand-edited after picking — the coordinates no longer match.
+              setPickedCoords(null);
+            }}
           />
 
           <Text style={styles.label}>city *</Text>
@@ -158,26 +178,7 @@ export default function KJAddVenueScreen() {
           />
 
           <Text style={styles.label}>karaoke nights</Text>
-          <View style={styles.nightsRow}>
-            {DAYS.map((day) => (
-              <Pressable
-                key={day}
-                onPress={() => toggleNight(day)}
-                style={({ pressed }) => [
-                  styles.dayChip,
-                  nights.includes(day) && styles.dayChipActive,
-                  pressed && styles.dayChipPressed,
-                ]}
-              >
-                <Text style={[
-                  styles.dayChipText,
-                  nights.includes(day) && styles.dayChipTextActive,
-                ]}>
-                  {day.slice(0, 3)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          <NightsRow nights={nights} onToggle={toggleNight} />
 
           <View style={styles.timeRow}>
             <View style={{ flex: 1 }}>
@@ -268,22 +269,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   textArea: { minHeight: 80, paddingVertical: 10 },
-  nightsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  dayChip: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.bg2,
-    borderRadius: Radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayChipActive: { backgroundColor: Colors.pink, borderColor: 'transparent' },
-  dayChipPressed: { opacity: 0.85 },
-  dayChipText: { color: Colors.textDim, fontSize: 14, fontWeight: '600' },
-  dayChipTextActive: { color: '#fff', fontWeight: '700' },
   timeRow: { flexDirection: 'row' },
   resultIcon: { fontSize: 48, textAlign: 'center', marginBottom: Spacing.sm },
   resultTitle: { ...Typography.title, color: Colors.text, textAlign: 'center', marginBottom: Spacing.sm },

@@ -33,6 +33,7 @@ import {
   EmptyState,
   Loading,
   MetaPill,
+  NightsRow,
 } from '../../src/components';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
@@ -164,10 +165,9 @@ export default function EventScreen() {
             <Text style={styles.venueCity}>{venue.city}</Text>
           </View>
         </View>
+        <NightsRow nights={venue.karaoke_nights} />
+
         <View style={styles.venueMeta}>
-          {venue.karaoke_nights.map((n) => (
-            <MetaPill key={n} label={n} variant="nights" />
-          ))}
           <MetaPill label={formatTimeRange(venue.start_time, venue.end_time)} />
           {venue.kj_name && <MetaPill label={`KJ: ${venue.kj_name}`} />}
         </View>

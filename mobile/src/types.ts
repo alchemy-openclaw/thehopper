@@ -102,6 +102,9 @@ export interface VenueSubmission {
   submitter_phone?: string | null;
   state?: string | null;
   existing_venue_id?: number | null;
+  /** Coordinates from a picked address-lookup result; skips server geocoding. */
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export interface VenueSubmissionResponse {
@@ -162,6 +165,17 @@ export interface StripeStatusResponse {
   charges_enabled: boolean;
   payouts_enabled: boolean;
   missing_info?: string[];
+}
+
+/** One pickable result from the address lookup on the venue/show forms. */
+export interface AddressSuggestion {
+  label: string;
+  address: string;
+  city: string;
+  state: string | null;
+  postcode: string | null;
+  lat: number;
+  lng: number;
 }
 
 export const DIFFICULTY_LABELS: Record<number, { label: string; emoji: string }> = {

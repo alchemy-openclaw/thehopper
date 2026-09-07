@@ -14,6 +14,7 @@ import type {
   VenueSubmission,
   VenueSubmissionResponse,
   VocalRange,
+  AddressSuggestion,
 } from './types';
 
 /**
@@ -253,6 +254,22 @@ export const api = {
   // --- Venue submission (add a karaoke spot) ---
 
   /**
+   * Look up a free-text address, biased toward an anchor. Deliberately called
+   * on demand rather than per keystroke — Nominatim's usage policy forbids
+   * autocomplete, and the backend throttles to one request a second.
+   */
+  geocodeSearch: (q: string, anchor?: { lat: number; lng: number } | null, city?: string) =>
+    jsonFetch<AddressSuggestion[]>(
+      withQuery(`${API_BASE}/geocode/search`, {
+        q,
+        lat: anchor ? String(anchor.lat) : undefined,
+        lng: anchor ? String(anchor.lng) : undefined,
+        city: city?.trim() || undefined,
+      }),
+    ),
+
+
+  /**
    * Resolve the device's GPS position to candidate venues + an address hint
    * for the Add Show "At Current Location" flow.
    */
@@ -405,6 +422,9 @@ export const api = {
     website?: string;
     instagram?: string;
     vibe?: string;
+    state?: string;
+    lat?: number;
+    lng?: number;
   }) =>
     jsonFetch<{ status: string; venue_id?: number; submission_id?: number; message: string }>(
       `${API_BASE}/kjs/${kj_id}/venues`,
