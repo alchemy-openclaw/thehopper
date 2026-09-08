@@ -51,7 +51,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from legal_pages import privacy_html, support_html
+from legal_pages import privacy_html, support_html, terms_html
 from seed_data import SONGS, VENUES
 from storage import build_storage
 from stripe_connect import ConnectManager, ConnectAccount
@@ -5244,6 +5244,11 @@ def privacy_policy() -> HTMLResponse:
 @app.get("/support", response_class=HTMLResponse)
 def support_page() -> HTMLResponse:
     return HTMLResponse(content=support_html())
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms_page() -> HTMLResponse:
+    return HTMLResponse(content=terms_html())
 
 
 # ---------------------------------------------------------------------------
