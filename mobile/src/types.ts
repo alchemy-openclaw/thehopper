@@ -25,6 +25,8 @@ export interface Venue {
   confidence?: string | null;
   /** ISO country code inferred from the coordinates, server-side. */
   country?: string | null;
+  instagram?: string | null;
+  facebook?: string | null;
 }
 
 export interface Song {
@@ -99,6 +101,7 @@ export interface VenueSubmission {
   phone?: string | null;
   website?: string | null;
   instagram?: string | null;
+  facebook?: string | null;
   vibe?: string | null;
   is_kj: boolean;
   submitter_phone?: string | null;
@@ -185,6 +188,7 @@ export interface VenueSuggestion {
   phone: string | null;
   website: string | null;
   instagram: string | null;
+  facebook: string | null;
 }
 
 export const DIFFICULTY_LABELS: Record<number, { label: string; emoji: string }> = {

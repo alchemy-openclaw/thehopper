@@ -1,5 +1,6 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { ReactNode } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { formatTime12h } from './format';
 import { Colors, Radius, Shadows, Spacing, TAP_HEIGHT, Typography } from './theme';
 import { DAYS, dayAbbrev } from './days';
 import type { Song } from './types';
@@ -171,6 +172,98 @@ export function NightsRow({
         );
       })}
     </View>
+  );
+}
+
+// ---------- TimeField ----------
+
+/**
+ * 12-hour time picker over a 24-hour "HH:MM" value.
+ *
+ * Storage stays 24-hour because the event-window maths depends on it (a show
+ * running 21:00–01:00 crosses midnight, and that only works on real times).
+ * Only the input and the label are 12-hour.
+ *
+ * The list is ordered from 4 PM round to 3:45 PM rather than starting at
+ * midnight: karaoke clusters between 7 PM and 2 AM, so every realistic choice
+ * sits at the top with no scrolling. The daytime hours are still there at the
+ * bottom — an end time of 12 AM or 1 AM is completely normal, so the AM hours
+ * could not simply be dropped.
+ */
+
+/** Start of the list. Everything before it wraps to the end. */
+const TIME_LIST_START_HOUR = 16;
+const TIME_STEP_MINUTES = 15;
+
+function buildTimeOptions(): string[] {
+  const all: string[] = [];
+  for (let m = 0; m < 24 * 60; m += TIME_STEP_MINUTES) {
+    all.push(
+      `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`,
+    );
+  }
+  const cut = (TIME_LIST_START_HOUR * 60) / TIME_STEP_MINUTES;
+  return [...all.slice(cut), ...all.slice(0, cut)];
+}
+
+const TIME_OPTIONS = buildTimeOptions();
+
+export function TimeField({
+  value,
+  onChange,
+  accessibilityLabel,
+}: {
+  /** 24-hour "HH:MM". */
+  value: string;
+  onChange: (next: string) => void;
+  accessibilityLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`${accessibilityLabel ?? 'Time'}: ${formatTime12h(value)}. Tap to change.`}
+        style={({ pressed }) => [styles.timeField, pressed && styles.btnPressed]}
+      >
+        <Text style={styles.timeFieldText}>{formatTime12h(value) || '—'}</Text>
+        <Text style={styles.timeFieldCaret}>▾</Text>
+      </Pressable>
+
+      <Modal
+        transparent
+        visible={open}
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable style={styles.timeScrim} onPress={() => setOpen(false)}>
+          <Pressable style={styles.timeCard} onPress={() => {}}>
+            <Text style={styles.timeTitle}>{accessibilityLabel ?? 'Time'}</Text>
+            <ScrollView>
+              {TIME_OPTIONS.map((t) => {
+                const active = t === value;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => {
+                      onChange(t);
+                      setOpen(false);
+                    }}
+                    style={({ pressed }) => [styles.timeRow, pressed && styles.btnPressed]}
+                  >
+                    <Text style={[styles.timeRowText, active && styles.timeRowTextActive]}>
+                      {formatTime12h(t)}
+                    </Text>
+                    {active && <Text style={styles.timeCheck}>✓</Text>}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -456,6 +549,53 @@ const styles = StyleSheet.create({
   dayChipPressed: { opacity: 0.85 },
   dayChipText: { color: Colors.textMute, fontSize: 13, fontWeight: '600' },
   dayChipTextOn: { color: Colors.text, fontWeight: '800' },
+  timeField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: TAP_HEIGHT,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.bg2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.sm,
+  },
+  timeFieldText: { color: Colors.text, fontSize: 16, fontWeight: '600' },
+  timeFieldCaret: { color: Colors.textMute, fontSize: 12 },
+  timeScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  timeCard: {
+    width: '100%',
+    maxWidth: 320,
+    maxHeight: '70%',
+    backgroundColor: Colors.panel,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: Spacing.sm,
+  },
+  timeTitle: {
+    color: Colors.textDim,
+    fontSize: 13,
+    fontWeight: '700',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    paddingHorizontal: Spacing.lg,
+  },
+  timeRowText: { color: Colors.text, fontSize: 16 },
+  timeRowTextActive: { color: Colors.pink, fontWeight: '800' },
+  timeCheck: { color: Colors.pink, fontSize: 16, fontWeight: '800' },
   banner: {
     borderRadius: Radius.sm,
     paddingHorizontal: 14,

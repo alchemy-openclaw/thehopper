@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { api } from '../../../src/api';
-import { Button, Card, Banner, Loading, NightsRow } from '../../../src/components';
+import { Button, Card, Banner, Loading, NightsRow, TimeField } from '../../../src/components';
 import { VenueLookup } from '../../../src/venue-lookup';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../../src/theme';
 
@@ -147,7 +147,8 @@ export default function KJAddVenueScreen() {
             labelStyle={styles.label}
             onAccept={(s) => {
               if (s.name) setName(s.name);
-              setAddress(s.address);
+              // The full one-line address — this is the only address field.
+              setAddress(s.label);
               setCity(s.city);
               setStateCode(s.state ?? '');
               setPickedCoords({ lat: s.lat, lng: s.lng });
@@ -161,14 +162,17 @@ export default function KJAddVenueScreen() {
           <Text style={styles.label}>address *</Text>
           <TextInput
             style={styles.input}
-            placeholder="filled in by the lookup, or type it"
+            placeholder="filled in by the lookup, or type the full address"
             placeholderTextColor={Colors.textMute}
             value={address}
             onChangeText={(t) => {
               setAddress(t);
-              // Hand-edited after accepting — the coordinates no longer match.
+              // Hand-edited after accepting — coordinates and state no longer
+              // describe what is in the field.
               setPickedCoords(null);
+              setStateCode('');
             }}
+            multiline
           />
 
           <Text style={styles.label}>karaoke nights</Text>
@@ -177,23 +181,11 @@ export default function KJAddVenueScreen() {
           <View style={styles.timeRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>start</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="20:00"
-                placeholderTextColor={Colors.textMute}
-                value={startTime}
-                onChangeText={setStartTime}
-              />
+              <TimeField value={startTime} onChange={setStartTime} accessibilityLabel="Start time" />
             </View>
             <View style={{ flex: 1, marginLeft: Spacing.sm }}>
               <Text style={styles.label}>end</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="00:00"
-                placeholderTextColor={Colors.textMute}
-                value={endTime}
-                onChangeText={setEndTime}
-              />
+              <TimeField value={endTime} onChange={setEndTime} accessibilityLabel="End time" />
             </View>
           </View>
 

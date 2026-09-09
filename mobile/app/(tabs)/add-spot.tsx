@@ -25,6 +25,7 @@ import {
   Card,
   Loading,
   NightsRow,
+  TimeField,
 } from '../../src/components';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
@@ -64,6 +65,7 @@ export default function AddSpotScreen() {
   const [phone, setPhone] = useState('');
   const [website, setWebsite] = useState('');
   const [instagram, setInstagram] = useState('');
+  const [facebook, setFacebook] = useState('');
   const [vibe, setVibe] = useState('');
 
   // "At Current Location" flow state
@@ -337,6 +339,7 @@ export default function AddSpotScreen() {
         phone: phone.trim() || undefined,
         website: website.trim() || undefined,
         instagram: instagram.trim() || undefined,
+        facebook: facebook.trim() || undefined,
         vibe: vibe.trim() || undefined,
         is_kj: isKJ,
         submitter_phone: isKJ
@@ -520,7 +523,9 @@ export default function AddSpotScreen() {
                 labelStyle={styles.fieldLabel}
                 onAccept={(s) => {
                   if (s.name) setName(s.name);
-                  setAddress(s.address);
+                  // The full one-line address, not just the street — this is
+                  // the only address field now.
+                  setAddress(s.label);
                   setCity(s.city);
                   if (s.state) setStateCode(s.state);
                   setPickedCoords({ lat: s.lat, lng: s.lng });
@@ -530,32 +535,28 @@ export default function AddSpotScreen() {
                   setPhone((prev) => prev || s.phone || '');
                   setWebsite((prev) => prev || s.website || '');
                   setInstagram((prev) => prev || s.instagram || '');
+                  setFacebook((prev) => prev || s.facebook || '');
                 }}
               />
 
+              {/* One field for the whole address. There is no separate state
+                  input: the server parses the state off the tail, and asking
+                  someone to split an address they can already read off a
+                  storefront was pure friction. */}
               <Text style={styles.fieldLabel}>Address *</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Filled in by the lookup, or type it"
+                placeholder="Filled in by the lookup, or type the full address"
                 placeholderTextColor={Colors.textMute}
                 value={address}
                 onChangeText={(t) => {
                   setAddress(t);
-                  // Hand-edited after accepting: the coordinates no longer
-                  // describe what is in the field, so let the server geocode.
+                  // Hand-edited after accepting: the coordinates and the state
+                  // no longer describe what is in the field.
                   setPickedCoords(null);
+                  setStateCode('');
                 }}
-              />
-
-              <Text style={styles.fieldLabel}>State (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="FL"
-                placeholderTextColor={Colors.textMute}
-                value={stateCode}
-                onChangeText={setStateCode}
-                autoCapitalize="characters"
-                maxLength={10}
+                multiline
               />
               {/* No nights picker here — this card describes the venue, and
                   the one in Show Details below is bound to the same state and
@@ -573,23 +574,11 @@ export default function AddSpotScreen() {
           <View style={styles.timeRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.fieldLabel}>Start</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="20:00"
-                placeholderTextColor={Colors.textMute}
-                value={startTime}
-                onChangeText={setStartTime}
-              />
+              <TimeField value={startTime} onChange={setStartTime} accessibilityLabel="Start time" />
             </View>
             <View style={{ flex: 1, marginLeft: Spacing.sm }}>
               <Text style={styles.fieldLabel}>End</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="00:00"
-                placeholderTextColor={Colors.textMute}
-                value={endTime}
-                onChangeText={setEndTime}
-              />
+              <TimeField value={endTime} onChange={setEndTime} accessibilityLabel="End time" />
             </View>
           </View>
 
@@ -623,6 +612,16 @@ export default function AddSpotScreen() {
                 placeholderTextColor={Colors.textMute}
                 value={instagram}
                 onChangeText={setInstagram}
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.fieldLabel}>Facebook (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="venue.page"
+                placeholderTextColor={Colors.textMute}
+                value={facebook}
+                onChangeText={setFacebook}
                 autoCapitalize="none"
               />
 

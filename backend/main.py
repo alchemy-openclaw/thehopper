@@ -19,6 +19,7 @@ import json
 import math
 import os
 import random
+import re
 import secrets
 import smtplib
 import sqlite3
@@ -53,6 +54,15 @@ from pydantic import BaseModel
 
 from legal_pages import privacy_html, support_html
 from seed_data import SONGS, VENUES
+# Read-time display normalisation, shared with the server-rendered pages.
+# Imported by name so existing call sites are unchanged.
+from display_format import (
+    US_STATES,
+    US_STATE_NAMES,
+    _display_address,
+    _display_city,
+    _normalize_city,
+)
 from storage import build_storage
 from stripe_connect import ConnectManager, ConnectAccount
 from kj_site_light import _kj_site_html_light
@@ -444,6 +454,64 @@ def init_db() -> None:
         if "country" not in vcols:
             conn.execute("ALTER TABLE venues ADD COLUMN country TEXT")
 
+        # Migration: canonical place identity + enrichment bookkeeping.
+        #
+        # The lookup used to search by name, keep the values and throw the
+        # identity away, which is why enrichment could only ever happen once —
+        # repeating it meant re-searching a name that might land somewhere
+        # else. Storing the provider's own reference turns a one-shot lookup
+        # into a durable handle on the real-world place.
+        #
+        # Provider-shaped rather than osm-shaped from the start: OSM is the
+        # first source, not the only conceivable one, and generalising later
+        # would be a migration over every row.
+        if "place_provider" not in vcols:
+            conn.execute("ALTER TABLE venues ADD COLUMN place_provider TEXT")
+        if "place_ref" not in vcols:
+            # Provider-namespaced id. For OSM: "<osm_type>/<osm_id>".
+            conn.execute("ALTER TABLE venues ADD COLUMN place_ref TEXT")
+        if "enriched_at" not in vcols:
+            conn.execute("ALTER TABLE venues ADD COLUMN enriched_at TEXT")
+        if "opening_hours" not in vcols:
+            # The bar's own hours. Emphatically NOT start_time/end_time, which
+            # are when karaoke runs — a venue open till 2 AM may run karaoke
+            # 9 till midnight, and conflating them would be wrong more often
+            # than right.
+            conn.execute("ALTER TABLE venues ADD COLUMN opening_hours TEXT")
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_venues_place_ref "
+            "ON venues(place_provider, place_ref)"
+        )
+        # Sweep order: oldest enrichment first, never-enriched before that.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_venues_enriched_at ON venues(enriched_at)"
+        )
+
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS venue_field_provenance (
+                   venue_id   INTEGER NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+                   field      TEXT    NOT NULL,
+                   source     TEXT    NOT NULL,
+                   rank       INTEGER NOT NULL,
+                   updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
+                   PRIMARY KEY (venue_id, field)
+               )"""
+        )
+
+        # Migration: venue socials. instagram was already collected on
+        # submissions but had nowhere to land — approving a submission dropped
+        # it on the floor. facebook is new; between the two, most bars have at
+        # least one even when they have no website.
+        if "instagram" not in vcols:
+            conn.execute("ALTER TABLE venues ADD COLUMN instagram TEXT")
+        if "facebook" not in vcols:
+            conn.execute("ALTER TABLE venues ADD COLUMN facebook TEXT")
+
+        scols = {row["name"] for row in conn.execute("PRAGMA table_info(venue_submissions)")}
+        if "facebook" not in scols:
+            conn.execute("ALTER TABLE venue_submissions ADD COLUMN facebook TEXT")
+
         # Bounding-box prefilter for radius queries. Not a spatial index, but
         # lat/lng BETWEEN is a plain range scan this can serve, and it is what
         # keeps haversine off the whole table.
@@ -615,31 +683,6 @@ def init_db() -> None:
 
 # USPS state codes, used for the state column (SEO hub pages) and for
 # parsing state out of free-form address tails.
-US_STATES = {
-    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI",
-    "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN",
-    "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH",
-    "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
-    "WV", "WI", "WY",
-}
-
-# Full state names → USPS codes, for address tails like "Punta Gorda, Florida".
-US_STATE_NAMES = {
-    "ALABAMA": "AL", "ALASKA": "AK", "ARIZONA": "AZ", "ARKANSAS": "AR",
-    "CALIFORNIA": "CA", "COLORADO": "CO", "CONNECTICUT": "CT", "DELAWARE": "DE",
-    "DISTRICT OF COLUMBIA": "DC", "FLORIDA": "FL", "GEORGIA": "GA",
-    "HAWAII": "HI", "IDAHO": "ID", "ILLINOIS": "IL", "INDIANA": "IN",
-    "IOWA": "IA", "KANSAS": "KS", "KENTUCKY": "KY", "LOUISIANA": "LA",
-    "MAINE": "ME", "MARYLAND": "MD", "MASSACHUSETTS": "MA", "MICHIGAN": "MI",
-    "MINNESOTA": "MN", "MISSISSIPPI": "MS", "MISSOURI": "MO", "MONTANA": "MT",
-    "NEBRASKA": "NE", "NEVADA": "NV", "NEW HAMPSHIRE": "NH", "NEW JERSEY": "NJ",
-    "NEW MEXICO": "NM", "NEW YORK": "NY", "NORTH CAROLINA": "NC",
-    "NORTH DAKOTA": "ND", "OHIO": "OH", "OKLAHOMA": "OK", "OREGON": "OR",
-    "PENNSYLVANIA": "PA", "RHODE ISLAND": "RI", "SOUTH CAROLINA": "SC",
-    "SOUTH DAKOTA": "SD", "TENNESSEE": "TN", "TEXAS": "TX", "UTAH": "UT",
-    "VERMONT": "VT", "VIRGINIA": "VA", "WASHINGTON": "WA",
-    "WEST VIRGINIA": "WV", "WISCONSIN": "WI", "WYOMING": "WY",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -723,13 +766,406 @@ def _geocode(query: str) -> tuple[float | None, float | None]:
     return None, None
 
 
-def _country_from_coords(lat: float | None, lng: float | None) -> str | None:
-    """Country code from a coordinate, for the two regions this directory has.
+# ---------------------------------------------------------------------------
+# Enrichment
+# ---------------------------------------------------------------------------
+#
+# A venue with a place_ref can be re-fetched deterministically: same id, same
+# place, every time. That is the difference between a one-shot form prefill
+# and a record that improves — and the reason the worker never searches by
+# name. An unattended name search across thousands of rows produces confident
+# wrong matches, which is a far worse failure than a missing phone number.
 
-    Deliberately coarse and deliberately not a geocoder call: it mirrors the
-    backfill in init_db so a row written at runtime and a row fixed by the
-    migration end up labelled the same way. Anything outside both boxes stays
-    NULL rather than being guessed at.
+_OSM_ID_PREFIX = {"node": "N", "way": "W", "relation": "R"}
+
+
+def _fetch_place(provider: str, ref: str) -> dict[str, Any] | None:
+    """Re-fetch a place by its provider reference. None if it cannot be read.
+
+    Only OSM today; the provider argument is the seam a second source slots
+    into without touching any caller.
+    """
+    if provider != "osm" or not ref or "/" not in ref:
+        return None
+    osm_type, _, osm_id = ref.partition("/")
+    prefix = _OSM_ID_PREFIX.get(osm_type)
+    if not prefix or not osm_id.isdigit():
+        return None
+    try:
+        results = _nominatim(
+            "lookup",
+            {
+                "osm_ids": f"{prefix}{osm_id}",
+                "format": "jsonv2",
+                "addressdetails": 1,
+                "extratags": 1,
+            },
+        )
+    except Exception:
+        return None
+    return results[0] if results else None
+
+
+def _place_to_fields(place: dict[str, Any]) -> dict[str, Any]:
+    """Map a provider record onto the venue columns enrichment may own.
+
+    Note what is absent: karaoke_nights, start_time, end_time and vibe. Those
+    are the things only a person knows, and no provider can tell us them.
+    opening_hours is the bar's hours and is stored separately for exactly
+    that reason.
+    """
+    a = place.get("address", {}) or {}
+    tags = place.get("extratags") or {}
+
+    house = (a.get("house_number") or "").strip()
+    road = (a.get("road") or "").strip()
+    place_name = (place.get("name") or "").strip()
+    street = f"{house} {road}".strip() if (house and road) else (place_name or road)
+
+    city = (
+        a.get("city") or a.get("town") or a.get("village")
+        or a.get("hamlet") or a.get("suburb") or ""
+    ).strip()
+
+    raw_state = (a.get("state") or "").strip()
+    state = None
+    if raw_state:
+        state = US_STATE_NAMES.get(raw_state.upper()) or (
+            raw_state.upper() if raw_state.upper() in US_STATES else raw_state
+        )
+
+    postcode = (a.get("postcode") or "").strip()
+    address = ", ".join(p for p in (street, city, state) if p)
+    if postcode and address:
+        address += f" {postcode}"
+
+    return {
+        "address": address or None,
+        "city": city or None,
+        "state": state,
+        "country": (a.get("country_code") or "").upper() or None,
+        "lat": float(place["lat"]) if place.get("lat") else None,
+        "lng": float(place["lon"]) if place.get("lon") else None,
+        "phone": _first_tag(tags, "phone", "contact:phone", "telephone"),
+        "website": _first_tag(tags, "website", "contact:website", "url"),
+        "instagram": _instagram_handle(_first_tag(tags, "contact:instagram", "instagram")),
+        "facebook": _facebook_handle(_first_tag(tags, "contact:facebook", "facebook")),
+        "opening_hours": _first_tag(tags, "opening_hours"),
+    }
+
+
+# How far a searched place may sit from a venue's stored coordinates and still
+# be accepted as the same place. Generous enough for a rooftop-vs-entrance
+# discrepancy, tight enough to reject the same-named bar in the next town.
+IDENTITY_MATCH_MILES = 0.5
+
+
+def _find_place_for_venue(row: sqlite3.Row) -> tuple[str, str] | None:
+    """Search for a stored venue's place, accepting only a nearby match.
+
+    Used once per venue to backfill identity. The distance check is the whole
+    safety mechanism: name searches are confidently wrong often enough that
+    without it a sweep would quietly relocate venues.
+    """
+    name = (row["name"] or "").strip()
+    if not name:
+        return None
+    # The city column holds slugs for a good part of the table; resolve it to
+    # the geocoder's own name so the search has usable context.
+    centroid = _city_centroid(row["city"] or "") if row["city"] else None
+    city_q = (centroid.display if centroid and centroid.display
+              else (row["city"] or "").strip())
+    query = ", ".join(p for p in (name, city_q) if p)
+    try:
+        results = _nominatim(
+            "search",
+            {"q": query, "format": "jsonv2", "limit": 5, "addressdetails": 1},
+        )
+    except Exception:
+        return None
+
+    for r in results or []:
+        if not r.get("osm_type") or r.get("osm_id") is None:
+            continue
+        dist = haversine_miles(row["lat"], row["lng"], float(r["lat"]), float(r["lon"]))
+        if dist <= IDENTITY_MATCH_MILES:
+            return "osm", f"{r['osm_type']}/{r['osm_id']}"
+    return None
+
+
+def enrich_venue(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
+    """Bring one venue up to date from its place provider.
+
+    Links the venue to a place first if it has no reference yet. Always stamps
+    enriched_at, even on failure, so a venue the provider does not know cannot
+    monopolise the sweep by staying permanently first in the queue.
+    """
+    venue_id = row["id"]
+    provider = row["place_provider"]
+    ref = row["place_ref"]
+    result: dict[str, Any] = {"venue_id": venue_id, "name": row["name"], "written": []}
+
+    if not (provider and ref):
+        found = _find_place_for_venue(row)
+        if found:
+            provider, ref = found
+            conn.execute(
+                "UPDATE venues SET place_provider = ?, place_ref = ? WHERE id = ?",
+                (provider, ref, venue_id),
+            )
+            result["linked"] = f"{provider}:{ref}"
+        else:
+            conn.execute(
+                "UPDATE venues SET enriched_at = datetime('now') WHERE id = ?",
+                (venue_id,),
+            )
+            result["status"] = "unmatched"
+            return result
+
+    place = _fetch_place(provider, ref)
+    if place is None:
+        conn.execute(
+            "UPDATE venues SET enriched_at = datetime('now') WHERE id = ?", (venue_id,)
+        )
+        result["status"] = "fetch_failed"
+        return result
+
+    fields = {
+        k: v for k, v in _place_to_fields(place).items() if k in ENRICHABLE_FIELDS
+    }
+    result["written"] = _write_fields(conn, venue_id, fields, "enrichment")
+    conn.execute(
+        "UPDATE venues SET enriched_at = datetime('now') WHERE id = ?", (venue_id,)
+    )
+    result["status"] = "enriched"
+    return result
+
+
+# A venue's coordinates are suspect when many rows share the exact same point:
+# that is the signature of an importer geocoding the *city* once and stamping
+# every venue with it. Three is enough to be a pattern rather than a genuine
+# shared address (a food hall, a hotel with two bars).
+STAMPED_COORD_MIN_CLUSTER = 3
+
+# How far from the city centre a repaired coordinate may sit and still be
+# believable. Generous — this rejects the wrong city, not the wrong street.
+CITY_SANITY_MILES = 25.0
+
+
+def repair_stamped_coordinates(dry_run: bool = True) -> dict[str, Any]:
+    """Re-derive coordinates for venues that share a stamped city centroid.
+
+    Only a name-matched place is accepted. Geocoding the address instead was
+    tried and rejected: for the Melbourne, VIC rows it either failed outright
+    ("Level 1/28 Elizabeth St") or landed 8 miles out on a same-named street
+    in another suburb. Turning a knowably-fake coordinate into a
+    plausible-looking wrong one is a downgrade — a wrong point that looks
+    trustworthy will quietly mis-sort distance results forever, where a
+    duplicate cluster at least announces itself.
+
+    Anything unresolved is reported rather than guessed at.
+    """
+    report: dict[str, Any] = {"dry_run": dry_run, "repaired": [], "unresolved": [], "clusters": 0}
+
+    with db() as conn:
+        clusters = conn.execute(
+            """SELECT lat, lng, COUNT(*) AS n FROM venues
+               GROUP BY lat, lng HAVING n >= ?""",
+            (STAMPED_COORD_MIN_CLUSTER,),
+        ).fetchall()
+        report["clusters"] = len(clusters)
+
+        for cluster in clusters:
+            rows = conn.execute(
+                "SELECT * FROM venues WHERE lat = ? AND lng = ?",
+                (cluster["lat"], cluster["lng"]),
+            ).fetchall()
+            for row in rows:
+                centroid = _city_centroid(row["city"] or "")
+                found = None
+                # Query with the geocoder's own name for the city rather than
+                # our stored value — that column holds slugs like
+                # "melbourne-vic-au", which is not a place any search
+                # understands.
+                city_q = (centroid.display if centroid and centroid.display
+                          else (row["city"] or "").strip())
+                try:
+                    results = _nominatim(
+                        "search",
+                        {
+                            "q": ", ".join(p for p in ((row["name"] or "").strip(), city_q) if p),
+                            "format": "jsonv2", "limit": 5, "addressdetails": 1,
+                        },
+                    )
+                except Exception:
+                    results = []
+                for r in results or []:
+                    if not r.get("osm_type") or r.get("osm_id") is None:
+                        continue
+                    r_lat, r_lng = float(r["lat"]), float(r["lon"])
+                    # Sanity: the match has to be in the right metro. Without a
+                    # centroid we cannot check, so we decline rather than guess.
+                    if centroid is None:
+                        continue
+                    if haversine_miles(centroid.lat, centroid.lng, r_lat, r_lng) > CITY_SANITY_MILES:
+                        continue
+                    found = (r_lat, r_lng, f"{r['osm_type']}/{r['osm_id']}")
+                    break
+
+                if not found:
+                    report["unresolved"].append(
+                        {"id": row["id"], "name": row["name"], "city": row["city"]}
+                    )
+                    continue
+
+                r_lat, r_lng, ref = found
+                report["repaired"].append(
+                    {
+                        "id": row["id"], "name": row["name"], "place_ref": ref,
+                        "from": [row["lat"], row["lng"]], "to": [r_lat, r_lng],
+                        "moved_miles": round(
+                            haversine_miles(row["lat"], row["lng"], r_lat, r_lng), 2
+                        ),
+                    }
+                )
+                if not dry_run:
+                    _write_fields(conn, row["id"], {"lat": r_lat, "lng": r_lng}, "enrichment")
+                    conn.execute(
+                        "UPDATE venues SET place_provider = 'osm', place_ref = ? WHERE id = ?",
+                        (ref, row["id"]),
+                    )
+    return report
+
+
+def enrich_batch(limit: int = 50) -> list[dict[str, Any]]:
+    """Enrich the venues least recently seen. NULL enriched_at sorts first."""
+    with db() as conn:
+        rows = conn.execute(
+            """SELECT * FROM venues
+               ORDER BY enriched_at IS NOT NULL, enriched_at ASC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [enrich_venue(conn, r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Field provenance
+# ---------------------------------------------------------------------------
+#
+# venues.source / venues.confidence describe the whole row, which is too
+# coarse: a KJ who corrects a phone number should not have to defend the
+# address from the next enrichment sweep. Provenance is therefore per field.
+#
+# One rule governs every write: a value only lands if its rank is greater than
+# or equal to the rank already recorded for that field. Enrichment refreshing
+# its own earlier value is allowed; enrichment stepping on a human is not.
+
+PROVENANCE_RANKS = {
+    "admin": 50,           # moderator; the override of last resort
+    "kj_claim": 40,        # the KJ who runs the venue
+    "user_submission": 20, # whoever added the show
+    "enrichment": 10,      # the worker, from a place provider
+    "scrape": 0,
+    "seed": 0,
+}
+
+# Where the venue *is* — one fact, spread across several columns.
+#
+# The provider outranks people on these. A KJ genuinely knows their phone,
+# their socials and when karaoke runs; they do not know the postal form of
+# their own address better than the mapping data does, and in practice they
+# type "1315 s congress" where the provider has "1315 South Congress Avenue,
+# Austin, TX 78704".
+#
+# They move as a group because they are not independent facts. Keeping a
+# person's address text while letting the provider rewrite city, state and
+# postcode produces a row that contradicts itself — a street from one source
+# stitched to a locality from another.
+#
+# Two escape hatches, and they are the whole safety story: admin still
+# outranks the provider, and a field the provider has no value for is never
+# written at all, so a venue it cannot see keeps whatever a person supplied.
+PROVIDER_OWNED_FIELDS = frozenset({"address", "city", "state", "country", "lat", "lng"})
+PROVIDER_OWNED_RANK = 45  # above kj_claim, below admin
+
+
+def _effective_rank(source: str, field: str) -> int:
+    """Rank of a write, which depends on the field as well as the source."""
+    if source == "enrichment" and field in PROVIDER_OWNED_FIELDS:
+        return PROVIDER_OWNED_RANK
+    return PROVENANCE_RANKS[source]
+
+# Fields a place provider is allowed to own. Nights, times and vibe are
+# absent on purpose: they are the things only a person can know.
+ENRICHABLE_FIELDS = (
+    "address", "city", "state", "country", "lat", "lng",
+    "phone", "website", "instagram", "facebook", "opening_hours",
+)
+
+
+def _provenance_ranks(conn: sqlite3.Connection, venue_id: int) -> dict[str, int]:
+    """Current rank per field. Missing fields are rank 0 — an unrecorded
+    field is scraped-or-unknown, and freely overwritable."""
+    rows = conn.execute(
+        "SELECT field, rank FROM venue_field_provenance WHERE venue_id = ?",
+        (venue_id,),
+    ).fetchall()
+    return {r["field"]: r["rank"] for r in rows}
+
+
+def _write_fields(
+    conn: sqlite3.Connection,
+    venue_id: int,
+    values: dict[str, Any],
+    source: str,
+) -> list[str]:
+    """Write venue fields at a given provenance, skipping anything outranked.
+
+    Returns the fields actually written, which is what the sweep logs and what
+    a dry run reports.
+    """
+    current = _provenance_ranks(conn, venue_id)
+
+    writable = {
+        f: v for f, v in values.items()
+        if v is not None and v != "" and _effective_rank(source, f) >= current.get(f, 0)
+    }
+    if not writable:
+        return []
+
+    assignments = ", ".join(f"{f} = ?" for f in writable)
+    conn.execute(
+        f"UPDATE venues SET {assignments} WHERE id = ?",
+        (*writable.values(), venue_id),
+    )
+    for f in writable:
+        # Store the effective rank, not the source's base rank — that is what
+        # later writes are compared against, so a provider-owned address has
+        # to record 45 or a KJ would win it back on the next edit.
+        conn.execute(
+            """INSERT INTO venue_field_provenance (venue_id, field, source, rank, updated_at)
+               VALUES (?,?,?,?, datetime('now'))
+               ON CONFLICT(venue_id, field) DO UPDATE SET
+                   source = excluded.source,
+                   rank = excluded.rank,
+                   updated_at = excluded.updated_at""",
+            (venue_id, f, source, _effective_rank(source, f)),
+        )
+    return sorted(writable)
+
+
+def _country_from_coords(lat: float | None, lng: float | None) -> str | None:
+    """Coarse country guess from a coordinate. Bootstrap only.
+
+    This covers the two regions the directory happens to hold today and
+    nothing else, which is the wrong shape for a directory going worldwide —
+    so it is a placeholder, not the answer. The authoritative code comes from
+    the place provider (`country_code` in the geocoder's address details), and
+    enrichment overwrites whatever this guessed.
+
+    Kept because it labels the existing rows correctly at migration time,
+    before enrichment has ever run.
     """
     if lat is None or lng is None:
         return None
@@ -816,26 +1252,6 @@ def _city_centroid(query: str) -> CityCentroid | None:
     if lat is None:
         return None
     return CityCentroid(lat, lng, country, display)
-
-
-def _normalize_city(value: str | None) -> str:
-    """Reduce a city to space-separated lowercase words for comparison.
-
-    The city column is not clean. A scraped import wrote URL slugs
-    ("san-francisco", "melbourne-vic-au") alongside properly cased names
-    ("Chicago", "West Melbourne") and bare lowercase ("austin"), so the same
-    place exists under several spellings. Comparing raw strings meant
-    "San Francisco" found nothing while "san-francisco" found seventeen.
-
-    Punctuation becomes a word break, so a slug and a typed name converge on
-    the same token string.
-    """
-    if not value:
-        return ""
-    out = []
-    for ch in value.lower():
-        out.append(ch if ch.isalnum() else " ")
-    return " ".join("".join(out).split())
 
 
 def _strip_trailing_state(tokens: list[str]) -> list[str]:
@@ -1390,6 +1806,14 @@ class VenueOut(BaseModel):
     # ISO country code, inferred from the coordinates. Distinguishes the
     # Melbourne, VIC rows from Melbourne, FL where the city text cannot.
     country: str | None = None
+    instagram: str | None = None
+    facebook: str | None = None
+    # The bar's own hours — distinct from start_time/end_time, which are when
+    # karaoke runs.
+    opening_hours: str | None = None
+    place_provider: str | None = None
+    place_ref: str | None = None
+    enriched_at: str | None = None
 
 
 class SongOut(BaseModel):
@@ -1482,6 +1906,7 @@ class VenueSubmissionRequest(BaseModel):
     phone: str | None = None
     website: str | None = None
     instagram: str | None = None
+    facebook: str | None = None
     vibe: str | None = None
     is_kj: bool = False
     submitter_phone: str | None = None  # for verification + notifications
@@ -1619,42 +2044,17 @@ class DeviceRegisterRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _display_city(raw: str | None, address: str | None = None) -> str | None:
-    """Turn a stored city value into something fit to show a person.
-
-    The column holds URL slugs for a good chunk of the table ("san-francisco"),
-    which render as-is on the venue card. The address usually carries the same
-    city properly cased ("1155 Grant Ave, San Francisco, CA 94133"), so prefer
-    that when a comma-separated part of it matches the stored value; otherwise
-    title-case the slug.
-
-    Read-time only — the stored value is left alone, so nothing that matches or
-    dedupes on it shifts under us.
-    """
-    if not raw or not raw.strip():
-        return raw
-    value = raw.strip()
-    normalized = _normalize_city(value)
-
-    if address:
-        for part in address.split(","):
-            part = part.strip()
-            if part and _normalize_city(part) == normalized:
-                return part
-
-    # Already looks like a display name (has capitals and no slug separators).
-    if value != value.lower() and "-" not in value and "_" not in value:
-        return value
-
-    return " ".join(w.capitalize() for w in normalized.split()) or value
-
-
 def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None, kj_song_required: bool = False) -> dict:
+    # Normalise the address first, then derive the city from the normalised
+    # form. _display_city() lifts the city out of the address verbatim when it
+    # matches, so feeding it the raw value made an all-caps address produce an
+    # all-caps city ("COCOA BEACH") right after we had tidied the slug case.
+    display_address = _display_address(row["address"])
     return {
         "id": row["id"],
         "name": row["name"],
-        "address": row["address"],
-        "city": _display_city(row["city"], row["address"]),
+        "address": display_address,
+        "city": _display_city(row["city"], display_address),
         "lat": row["lat"],
         "lng": row["lng"],
         "karaoke_nights": [n for n in row["karaoke_nights"].split(",") if n],
@@ -1676,6 +2076,12 @@ def venue_row_to_dict(row: sqlite3.Row, distance: float | None = None, kj_song_r
         "song_request_required": kj_song_required,
         "state": row["state"] if "state" in row.keys() else None,
         "country": row["country"] if "country" in row.keys() else None,
+        "instagram": row["instagram"] if "instagram" in row.keys() else None,
+        "facebook": row["facebook"] if "facebook" in row.keys() else None,
+        "opening_hours": row["opening_hours"] if "opening_hours" in row.keys() else None,
+        "place_provider": row["place_provider"] if "place_provider" in row.keys() else None,
+        "place_ref": row["place_ref"] if "place_ref" in row.keys() else None,
+        "enriched_at": row["enriched_at"] if "enriched_at" in row.keys() else None,
         "source": row["source"] if "source" in row.keys() else None,
         "confidence": row["confidence"] if "confidence" in row.keys() else None,
     }
@@ -1873,40 +2279,57 @@ def list_venues(
     # reach past the circle: a default radius is our guess and should be
     # forgiving, but a radius the user picked on the chip is an instruction.
     explicit_radius = radius_miles is not None
-    if lat is not None and lng is not None:
-        if radius_miles is None:
-            radius_miles = DEFAULT_RADIUS_MILES
-    elif city:
-        centroid = _city_centroid(city)
-        if centroid is not None:
-            lat, lng = centroid.lat, centroid.lng
-            if radius_miles is None:
-                radius_miles = DEFAULT_RADIUS_MILES
-        # No centroid (unknown place, or the geocoder is down): fall through to
-        # the name match alone rather than returning nothing.
-    elif lat is None and lng is None:
-        lat, lng = DEFAULT_SEARCH_COORDS
-        radius_miles = DEFAULT_RADIUS_MILES
-    else:
+
+    if (lat is None) != (lng is None):
         raise HTTPException(
             status_code=422,
             detail="lat and lng must be provided together, or use city",
         )
 
+    # Two different anchors, and conflating them is a bug worth naming: the
+    # *filter* anchor decides which venues come back, while the *user* position
+    # is the only thing "3.2 mi" on a card may ever be measured from. They are
+    # the same point for a near-me search and completely different for a city
+    # search, where filtering happens around a centroid the user is not
+    # standing on — possibly not even on the same continent.
+    user_lat, user_lng = lat, lng
+    anchor_lat: float | None = None
+    anchor_lng: float | None = None
+
+    if city:
+        centroid = _city_centroid(city)
+        if centroid is not None:
+            anchor_lat, anchor_lng = centroid.lat, centroid.lng
+            if radius_miles is None:
+                radius_miles = DEFAULT_RADIUS_MILES
+        # No centroid (unknown place, or the geocoder is down): fall through to
+        # the name match alone rather than returning nothing.
+    elif lat is not None and lng is not None:
+        anchor_lat, anchor_lng = lat, lng
+        if radius_miles is None:
+            radius_miles = DEFAULT_RADIUS_MILES
+    else:
+        # Bare request: treated as "someone near the default anchor". Not the
+        # user's own position, so nothing is measured from it.
+        anchor_lat, anchor_lng = DEFAULT_SEARCH_COORDS
+        radius_miles = DEFAULT_RADIUS_MILES
+
     with db() as conn:
-        if lat is not None and lng is not None and radius_miles is not None:
+        if anchor_lat is not None and anchor_lng is not None and radius_miles is not None:
             # Bounding box in SQL (indexed range scan), exact circle via the
             # registered haversine. On a city search with no explicit radius
             # the name match is unioned back in, so a venue recorded as
             # "Chicago" is still found when it sits outside our default circle
             # — the city column is unreliable but it is not worthless, and a
             # centroid is a point where a city is an area.
-            min_lat, max_lat, min_lng, max_lng = _bbox_for_radius(lat, lng, radius_miles)
+            min_lat, max_lat, min_lng, max_lng = _bbox_for_radius(
+                anchor_lat, anchor_lng, radius_miles
+            )
             rows = conn.execute(
                 """SELECT * FROM venues
                    WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
                      AND haversine_miles(?, ?, lat, lng) <= ?""",
-                (min_lat, max_lat, min_lng, max_lng, lat, lng, radius_miles),
+                (min_lat, max_lat, min_lng, max_lng, anchor_lat, anchor_lng, radius_miles),
             ).fetchall()
             if city and not explicit_radius:
                 seen_ids = {r["id"] for r in rows}
@@ -1940,19 +2363,27 @@ def list_venues(
 
     out = []
     for r in rows:
-        # Distance is still computed per row because the response carries it
-        # and the list is sorted by it; the SQL above has already done the
-        # filtering, including the radius.
+        # Measured from the user, never from the filter anchor. A city search
+        # by someone who has not shared their location carries no distance at
+        # all, which is honest — better than a number that looks like "how far
+        # away is this" but answers "how far is this from the middle of a city
+        # you typed".
         dist = None
-        if lat is not None and lng is not None:
-            dist = haversine_miles(lat, lng, r["lat"], r["lng"])
+        if user_lat is not None and user_lng is not None:
+            dist = haversine_miles(user_lat, user_lng, r["lat"], r["lng"])
         kj_id = r["kj_id"] if "kj_id" in r.keys() else None
         song_required = kj_req_map.get(kj_id, False) if kj_id else False
         out.append(venue_row_to_dict(r, dist, song_required))
 
-    if lat is not None and lng is not None:
+    if user_lat is not None and user_lng is not None:
         out.sort(key=lambda v: (v["distance_miles"] is None, v["distance_miles"]))
-    elif len(out) > CITY_RESULT_CAP:
+    elif anchor_lat is not None and anchor_lng is not None:
+        # No user position to sort by, but nearest-the-centre is still a better
+        # order than table order. Sorted on a key that is not returned, so the
+        # cards stay free of a distance the user never asked about.
+        out.sort(key=lambda v: haversine_miles(anchor_lat, anchor_lng, v["lat"], v["lng"]))
+
+    if (user_lat is None or user_lng is None) and len(out) > CITY_RESULT_CAP:
         out = out[:CITY_RESULT_CAP]
 
     return out
@@ -1988,11 +2419,13 @@ def _first_tag(tags: dict[str, Any], *keys: str) -> str | None:
     return None
 
 
-def _instagram_handle(raw: str | None) -> str | None:
-    """Normalise an OSM instagram tag to a bare handle.
+def _social_handle(raw: str | None, *domains: str) -> str | None:
+    """Normalise an OSM social tag to a bare handle.
 
-    The tag is sometimes a full URL, sometimes "@handle", sometimes bare, and
-    the form stores handles — so strip it down to the one shape.
+    The tag arrives as a full URL, as "@handle", or bare depending on who
+    edited it, and the forms store handles — so strip it to the one shape.
+    A leftover slash means it was a deep link (a post, a photo) rather than a
+    profile, and those are dropped rather than stored as a bogus handle.
     """
     if not raw:
         return None
@@ -2000,12 +2433,21 @@ def _instagram_handle(raw: str | None) -> str | None:
     for prefix in ("https://", "http://"):
         if v.lower().startswith(prefix):
             v = v[len(prefix):]
-    for prefix in ("www.", "instagram.com/", "m.instagram.com/"):
+    for prefix in ("www.", "m.", *domains):
         if v.lower().startswith(prefix):
             v = v[len(prefix):]
     v = v.split("?")[0].lstrip("@").strip("/")
-    # A leftover slash means it was a deep link, not a profile.
-    return v or None if "/" not in v else None
+    return (v or None) if "/" not in v else None
+
+
+def _instagram_handle(raw: str | None) -> str | None:
+    return _social_handle(raw, "instagram.com/", "m.instagram.com/")
+
+
+def _facebook_handle(raw: str | None) -> str | None:
+    # Facebook also publishes numeric-id profile links, which are valid but
+    # useless to show, and "pages/Name/123" deep links the slash rule drops.
+    return _social_handle(raw, "facebook.com/", "fb.com/", "fb.me/")
 
 
 class VenueSuggestion(BaseModel):
@@ -2029,6 +2471,17 @@ class VenueSuggestion(BaseModel):
     phone: str | None = None
     website: str | None = None
     instagram: str | None = None
+    facebook: str | None = None
+    # The bar's own hours, not the karaoke night's. Kept separate on purpose:
+    # a venue open till 2 AM may run karaoke 9 till midnight.
+    opening_hours: str | None = None
+    # ISO country code straight from the provider. Authoritative, unlike
+    # guessing from coordinates — and the directory is not US-only.
+    country: str | None = None
+    # Durable handle on the place, so this lookup can be repeated later
+    # instead of re-searching a name that may land somewhere else.
+    place_provider: str | None = None
+    place_ref: str | None = None
 
 
 @app.get(f"{API_PREFIX}/venues/lookup", response_model=list[VenueSuggestion])
@@ -2133,14 +2586,26 @@ def venue_lookup(
             continue
         seen.add(dedupe_key)
         tags = r.get("extratags") or {}
+        # "way/34633854" — provider-namespaced so another provider can slot in
+        # beside OSM without a second migration.
+        place_ref = None
+        if r.get("osm_type") and r.get("osm_id") is not None:
+            place_ref = f"{r['osm_type']}/{r['osm_id']}"
         out.append(
             VenueSuggestion(
                 name=place_name or None,
                 label=label,
+                opening_hours=_first_tag(tags, "opening_hours"),
+                country=(a.get("country_code") or "").upper() or None,
+                place_provider="osm" if place_ref else None,
+                place_ref=place_ref,
                 phone=_first_tag(tags, "phone", "contact:phone", "telephone"),
                 website=_first_tag(tags, "website", "contact:website", "url"),
                 instagram=_instagram_handle(
                     _first_tag(tags, "contact:instagram", "instagram")
+                ),
+                facebook=_facebook_handle(
+                    _first_tag(tags, "contact:facebook", "facebook")
                 ),
                 address=street,
                 city=city_name,
@@ -3770,13 +4235,14 @@ def submit_venue(req: VenueSubmissionRequest):
         cur = conn.execute(
             """INSERT INTO venue_submissions
                (name, address, city, lat, lng, karaoke_nights, start_time, end_time,
-                kj_name, phone, website, instagram, vibe, is_kj, submitter_phone, status)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending')""",
+                kj_name, phone, website, instagram, facebook, vibe, is_kj,
+                submitter_phone, status)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending')""",
             (
                 req.name.strip(), req.address.strip(), req.city.strip(),
                 lat, lng, nights, req.start_time, req.end_time,
-                req.kj_name, req.phone, req.website, req.instagram, req.vibe,
-                1 if req.is_kj else 0, submitter_phone,
+                req.kj_name, req.phone, req.website, req.instagram, req.facebook,
+                req.vibe, 1 if req.is_kj else 0, submitter_phone,
             ),
         )
         submission_id = cur.lastrowid
@@ -3786,6 +4252,60 @@ def submit_venue(req: VenueSubmissionRequest):
         status="pending",
         message="Thanks! Your submission is pending review. We'll text you when it's approved."
     )
+
+
+@app.post(f"{API_PREFIX}/admin/enrich")
+def admin_enrich(limit: int = Query(50, ge=1, le=500)):
+    """Enrich the least-recently-seen venues from their place provider.
+
+    Sequential and rate-limited by _nominatim()'s global 1/sec throttle, so a
+    batch of 50 takes about a minute of wall clock. The whole directory is
+    roughly an hour; run it in batches or on a schedule rather than expecting
+    one request to cover everything.
+    """
+    results = enrich_batch(limit=limit)
+    summary: dict[str, int] = {}
+    for r in results:
+        summary[r.get("status", "unknown")] = summary.get(r.get("status", "unknown"), 0) + 1
+    return {"processed": len(results), "summary": summary, "results": results}
+
+
+@app.post(f"{API_PREFIX}/admin/repair-coordinates")
+def admin_repair_coordinates(dry_run: bool = Query(True)):
+    """Find and optionally fix venues sharing a stamped city centroid.
+
+    Defaults to a dry run: this rewrites coordinates, and coordinates now
+    drive every search, so seeing the diff before applying it is the point.
+    """
+    return repair_stamped_coordinates(dry_run=dry_run)
+
+
+@app.get(f"{API_PREFIX}/admin/enrichment-status")
+def admin_enrichment_status():
+    """How much of the directory is linked to a canonical place."""
+    with db() as conn:
+        total = conn.execute("SELECT COUNT(*) c FROM venues").fetchone()["c"]
+        linked = conn.execute(
+            "SELECT COUNT(*) c FROM venues WHERE place_ref IS NOT NULL"
+        ).fetchone()["c"]
+        never = conn.execute(
+            "SELECT COUNT(*) c FROM venues WHERE enriched_at IS NULL"
+        ).fetchone()["c"]
+        by_country = conn.execute(
+            "SELECT COALESCE(country,'?') k, COUNT(*) c FROM venues GROUP BY k ORDER BY c DESC"
+        ).fetchall()
+        protected = conn.execute(
+            """SELECT source, COUNT(*) c FROM venue_field_provenance
+               WHERE rank > ? GROUP BY source""",
+            (PROVENANCE_RANKS["enrichment"],),
+        ).fetchall()
+    return {
+        "venues": total,
+        "linked_to_place": linked,
+        "never_enriched": never,
+        "by_country": {r["k"]: r["c"] for r in by_country},
+        "fields_protected_from_enrichment": {r["source"]: r["c"] for r in protected},
+    }
 
 
 @app.post(f"{API_PREFIX}/venues/submissions/{{submission_id}}/approve")
@@ -3822,15 +4342,19 @@ def approve_submission(submission_id: int):
         cur = conn.execute(
             """INSERT INTO venues
                (name, address, city, lat, lng, karaoke_nights, start_time, end_time,
-                kj_name, phone, website, price_jump_queue, premium_slot_position,
-                premium_slot_price, vibe, source, confidence, state, country)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                kj_name, phone, website, instagram, facebook, price_jump_queue,
+                premium_slot_position, premium_slot_price, vibe, source,
+                confidence, state, country)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 sub["name"], sub["address"], sub["city"],
                 sub_lat,
                 sub_lng,
                 sub["karaoke_nights"], sub["start_time"], sub["end_time"],
                 sub["kj_name"], sub["phone"], sub["website"],
+                # These used to stop at the submissions table — the venue had
+                # nowhere to put them, so approval silently discarded them.
+                sub["instagram"], sub["facebook"],
                 5.0, 3, 5.0, sub["vibe"],
                 # A human-submitted venue with nights listed is as good as it
                 # gets short of a KJ claiming it themselves.
@@ -3843,6 +4367,24 @@ def approve_submission(submission_id: int):
             ),
         )
         venue_id = cur.lastrowid
+
+        # Record who wrote what, so the enrichment sweep cannot later
+        # overwrite a field a person supplied. A KJ-claimed venue outranks
+        # everything; an ordinary submission still beats the machine.
+        source = "kj_claim" if sub["is_kj"] else "user_submission"
+        _write_fields(
+            conn,
+            venue_id,
+            {
+                f: sub[f]
+                for f in ("address", "city", "phone", "website", "instagram", "facebook")
+                if f in sub.keys() and sub[f]
+            },
+            source,
+        )
+        # Coordinates from a picked lookup result are the provider's own, so
+        # they are recorded as enrichment and stay refreshable.
+        _write_fields(conn, venue_id, {"lat": sub_lat, "lng": sub_lng}, "enrichment")
 
         # Mark submission as approved
         conn.execute(

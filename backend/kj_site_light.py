@@ -6,6 +6,9 @@ is passed to the KJ site endpoint.
 """
 import html
 import json as _json
+
+# Shared with the API so a KJ's own site spells addresses the same way.
+from display_format import _display_address
 import os
 import sqlite3
 
@@ -57,7 +60,7 @@ def _kj_site_html_light(kj: sqlite3.Row, venues: list[sqlite3.Row]) -> str:
     for v in venues:
         vid = v["id"]
         v_name = html.escape(v["name"])
-        v_addr = html.escape(v["address"])
+        v_addr = html.escape(_display_address(v["address"]) or "")
         v_city = html.escape(v["city"])
         v_lat = v["lat"] or 0
         v_lng = v["lng"] or 0

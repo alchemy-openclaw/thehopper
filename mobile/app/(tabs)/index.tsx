@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Linking,
   Modal,
@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { AppConfig, Venue } from '../../src/types';
 import { api } from '../../src/api';
-import { getGeolocationCached } from '../../src/geo';
+import { getGeolocationCached, getLastKnownGeo } from '../../src/geo';
 import { daysUntilNextEvent, eventDayLabel, hasEventSoon } from '../../src/event-window';
 import { formatTime12h, formatTimeRange } from '../../src/format';
 import { useVenueContext } from '../../src/venue-context';
@@ -35,6 +35,17 @@ type Filter =
   | { kind: 'all' }
   | { kind: 'near' }
   | { kind: 'city'; city: string };
+
+/** Type this many characters of a city before the search runs on its own. */
+const CITY_SEARCH_MIN_CHARS = 4;
+/** Pause in typing that counts as "done typing", in ms.
+ *
+ * 600 rather than a rounder 300 or 500 because it is where the cost curve
+ * flattens. Typing "San Francisco" fires one search at every speed from fast
+ * to hunt-and-peck at 600ms; at 450ms a slow typer fires nine, one per
+ * character, each a city the server may have to geocode. Raising it further
+ * buys nothing and only adds lag. */
+const CITY_SEARCH_DEBOUNCE_MS = 600;
 
 /** Radius options for the near-me search, in miles. */
 const RADIUS_OPTIONS = [10, 20, 30, 40, 50];
@@ -73,16 +84,26 @@ export default function VenuesScreen() {
     [venues],
   );
 
+  // Monotonic id for in-flight searches. Typing now starts requests on its
+  // own, so two can be in the air at once — and a slow "San" landing after a
+  // fast "San Francisco" would quietly replace the right results with stale
+  // ones. Only the newest request is allowed to write state.
+  const searchSeq = useRef(0);
+
   const loadVenues = async (lat?: number, lng?: number, cityFilter?: string, radius?: number) => {
+    const seq = ++searchSeq.current;
     setLoading(true);
     setError(null);
     try {
       const data = await api.getVenues(lat, lng, cityFilter, radius);
+      if (seq !== searchSeq.current) return;
       setVenues(data);
     } catch (e) {
+      if (seq !== searchSeq.current) return;
       setError(e instanceof Error ? e.message : 'Failed to load venues');
     } finally {
-      setLoading(false);
+      // A superseded request must not clear the spinner the newer one owns.
+      if (seq === searchSeq.current) setLoading(false);
     }
   };
 
@@ -125,14 +146,47 @@ export default function VenuesScreen() {
     await loadVenues(lastLocation.lat, lastLocation.lng, undefined, miles);
   };
 
-  const handleCitySearch = () => {
+  const runCitySearch = async (trimmed: string) => {
+    setFilter({ kind: 'city', city: trimmed });
+    // Send a remembered fix alongside the city. The city still decides which
+    // venues come back; the coordinates only decide what "3.2 mi" on a card is
+    // measured from. Read-only, so searching a city never triggers a location
+    // prompt — without a stored fix the server just omits distances.
+    const here = await getLastKnownGeo();
+    loadVenues(here?.lat, here?.lng, trimmed);
+  };
+
+  /** Go button / keyboard submit. Runs whatever is typed, no minimum — an
+      explicit tap is an instruction, not a guess about intent. */
+  const handleCitySearch = async () => {
     const trimmed = city.trim();
     // An empty city box is a no-op now — there is no "show everything" view
     // to fall back to, by design.
     if (!trimmed) return;
-    setFilter({ kind: 'city', city: trimmed });
-    loadVenues(undefined, undefined, trimmed);
+    await runCitySearch(trimmed);
   };
+
+  // Search as the city is typed, once there is enough of it to mean something.
+  //
+  // Four characters is the threshold because shorter prefixes are mostly
+  // ambiguous ("san", "new") and every distinct string we send is a city the
+  // server may have to geocode. The debounce matters for the same reason:
+  // firing per keystroke would be the autocomplete pattern Nominatim's usage
+  // policy forbids, so this waits for a pause in typing instead.
+  useEffect(() => {
+    const trimmed = city.trim();
+    if (trimmed.length < CITY_SEARCH_MIN_CHARS) return;
+    // Already showing this exact search (the Go button or a previous pause).
+    if (filter.kind === 'city' && filter.city === trimmed) return;
+
+    const timer = setTimeout(() => {
+      void runCitySearch(trimmed);
+    }, CITY_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // runCitySearch is stable enough for this; re-running on `filter` would
+    // retrigger the moment the search lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [city]);
 
   /** Leaving a city/near search returns to the landing state — an empty list,
       not the national dump. */

@@ -13,6 +13,10 @@ catch-all, so crawlers get real content.
 import html
 import json
 import sqlite3
+
+# Same read-time normalisation the API applies, so the public pages and the
+# app never disagree about how an address is spelled.
+from display_format import _display_address, _display_city
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "thehopper.db"
@@ -233,7 +237,9 @@ def city_page(state: str, city_slug: str) -> str | None:
     cards = []
     events = []
     for i, v in enumerate(venues):
-        addr_bits = [b for b in (v["address"], v["city"], st) if b]
+        addr_bits = [
+            b for b in (_display_address(v["address"]), _display_city(v["city"], v["address"]), st) if b
+        ]
         addr = html.escape(", ".join(addr_bits))
         phone = (
             f' · <a href="tel:{html.escape(v["phone"])}">{html.escape(v["phone"])}</a>'
@@ -273,7 +279,11 @@ def city_page(state: str, city_slug: str) -> str | None:
                                 "@type": "Place",
                                 "name": v["name"],
                                 "address": ", ".join(
-                                    b for b in (v["address"], v["city"], st) if b
+                                    b for b in (
+                                        _display_address(v["address"]),
+                                        _display_city(v["city"], v["address"]),
+                                        st,
+                                    ) if b
                                 ),
                             },
                             "eventSchedule": by_day,
