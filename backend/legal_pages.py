@@ -1,4 +1,4 @@
-"""Static privacy policy and support pages.
+"""Static privacy policy, terms of service, and support pages.
 
 Apple and Google both require a reachable privacy policy URL, and Apple checks
 the support URL during review. These are served from the API host as plain
@@ -18,6 +18,9 @@ from __future__ import annotations
 
 # Effective date shown on the policy. Bump when the substance changes.
 POLICY_EFFECTIVE_DATE = "August 29, 2026"
+
+# Effective date for the terms of service. Bump when the substance changes.
+TERMS_EFFECTIVE_DATE = "September 8, 2026"
 
 # Contact address published to users and to app-store reviewers. This MUST be a
 # real, monitored mailbox — Apple has rejected apps for unreachable support
@@ -65,7 +68,7 @@ def _page(title: str, body: str) -> str:
 </head>
 <body><main>
 {body}
-<footer>KaraokeSpot · <a href="/privacy">Privacy</a> · <a href="/support">Support</a></footer>
+<footer>KaraokeSpot · <a href="/privacy">Privacy</a> · <a href="/support">Support</a> · <a href="/terms">Terms</a></footer>
 </main></body>
 </html>"""
 
@@ -151,6 +154,96 @@ note the change in the app.</p>
 
 <h2>Contact</h2>
 <p><a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a></p>
+""",
+    )
+
+
+def terms_html() -> str:
+    return _page(
+        "Terms of Service",
+        f"""
+<p class="eyebrow">KaraokeSpot</p>
+<h1>Terms of Service</h1>
+<p class="updated">Effective {TERMS_EFFECTIVE_DATE}</p>
+
+<p>These terms govern your use of KaraokeSpot — the app, the website at
+karaokespot.us, and the KJ sites we host. By using KaraokeSpot you agree to
+them. If you do not agree, do not use the app.</p>
+
+<h2>What KaraokeSpot does</h2>
+<p>KaraokeSpot is a directory of karaoke nights at physical venues, plus tools
+for singers (finding nights, joining the queue, messaging the host) and for
+karaoke hosts (KJs) to run those nights. We list venues but we do not own or
+run them, and we are not present at the events.</p>
+
+<h2>Accounts and verification</h2>
+<p>Browsing works without an account. Joining a queue, messaging a KJ, or
+taking payments as a KJ requires verifying a phone number by SMS. You are
+responsible for keeping access to your verified number and for anything done
+through it.</p>
+
+<h2>Payments</h2>
+<p>Payments in the app cover real-world services at a physical venue: moving up
+a venue's live singing queue, and tipping the KJ hosting the night. Payments
+are processed by Stripe on Stripe's own checkout page; we never see your card.
+Funds for queue placement and tips go to the KJ's own connected Stripe account,
+less a platform fee we retain.</p>
+<p>Queue placement is fulfilled in person, on the night, at that venue. If a
+payment does not do what it was supposed to — you paid to move up and were not
+called, or the night was cancelled — email {CONTACT_EMAIL} with the venue and
+roughly when it happened and we will make it right, including refunds where
+appropriate. Tips are gratuities and are not refundable. Nothing is unlocked
+digitally by paying, so store refund policies for digital goods do not
+apply.</p>
+
+<h2>Conduct</h2>
+<p>Karaoke happens in real bars with real people. Do not use KaraokeSpot to
+harass anyone, to spam KJs or singers, to send unlawful content, to impersonate
+someone else, or to list a venue you do not have the right to list. Follow the
+house rules of the venue you are in, and leave when the event ends — venues
+trust us with their nights, and overstaying or abusing that risks the whole
+system. Venues serving alcohol may have their own age restrictions, and you are
+responsible for meeting them. We may suspend or ban a phone number for
+violations.</p>
+
+<h2>KJ terms</h2>
+<p>If you run events as a KJ: keep your listing accurate (nights, times,
+venue), treat singer payments and tips as your own income — taxes are yours,
+we do not withhold — and honour queue placements people paid for. Stripe may
+require identity verification for payouts; providing false information to
+Stripe or to us is grounds for termination.</p>
+
+<h2>Listing data</h2>
+<p>Venue and schedule information comes from user submissions and public
+sources. We work to keep it right but do not guarantee that any listing is
+accurate, current, or complete — call ahead before travelling to a venue. If
+you submit venue information or photos you confirm it is accurate and you give
+us a non-exclusive licence to display it as part of the directory. Venue owners
+can claim or correct their listing by contacting {CONTACT_EMAIL}.</p>
+
+<h2>Availability and changes</h2>
+<p>We may add, change, or remove features, and may suspend the service for
+maintenance. We may update these terms; material changes get a new effective
+date above, and continuing to use the app after that means you accept the
+updated terms.</p>
+
+<h2>Disclaimers and liability</h2>
+<p>KaraokeSpot is provided "as is" without warranties of any kind. We are not
+liable for what happens at a physical venue — the conduct of KJs, singers, or
+venue staff, the quality of the show, or anything occurring on the premises.
+To the maximum extent permitted by law, our total liability to you for any
+claim relating to the service is limited to the greater of the platform fees we
+retained from your payments in the six months before the claim, or USD 50.</p>
+
+<h2>Legal</h2>
+<p>These terms are governed by the laws of the State of Florida, USA. If any
+part of these terms is unenforceable, the rest stays in force. These terms,
+together with the <a href="/privacy">privacy policy</a>, are the entire
+agreement between you and us regarding KaraokeSpot.</p>
+
+<h2>Contact</h2>
+<p>Alchemy Creative Lounge, Melbourne, Florida.
+<a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a></p>
 """,
     )
 
