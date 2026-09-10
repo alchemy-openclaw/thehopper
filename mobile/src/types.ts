@@ -110,6 +110,9 @@ export interface VenueSubmission {
   /** Coordinates from a picked address-lookup result; skips server geocoding. */
   lat?: number | null;
   lng?: number | null;
+  /** The resolved place, so the server can keep enriching it later. */
+  place_provider?: string | null;
+  place_ref?: string | null;
 }
 
 export interface VenueSubmissionResponse {
@@ -189,6 +192,12 @@ export interface VenueSuggestion {
   website: string | null;
   instagram: string | null;
   facebook: string | null;
+  /** The bar's own hours — not the karaoke night's start/end times. */
+  opening_hours: string | null;
+  country: string | null;
+  /** Durable handle on the place, so enrichment can re-fetch it later. */
+  place_provider: string | null;
+  place_ref: string | null;
 }
 
 export const DIFFICULTY_LABELS: Record<number, { label: string; emoji: string }> = {

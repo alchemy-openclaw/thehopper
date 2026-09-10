@@ -16,9 +16,9 @@ import * as WebBrowser from 'expo-web-browser';
 import { getSessionToken, setSessionToken } from '../../src/session';
 import { api, API_BASE } from '../../src/api';
 import { getGeolocationCached } from '../../src/geo';
-import { VenueLookup } from '../../src/venue-lookup';
+import { VenueLookup, ResolvedVenueCard } from '../../src/venue-lookup';
 import { useKJContext } from '../../src/kj-context';
-import type { KJ, Venue } from '../../src/types';
+import type { KJ, Venue, VenueSuggestion } from '../../src/types';
 import {
   Banner,
   Button,
@@ -59,6 +59,12 @@ export default function AddSpotScreen() {
   // Coordinates from a picked address-lookup result, sent with the submission
   // so the backend does not re-geocode text the user may since have edited.
   const [pickedCoords, setPickedCoords] = useState<{ lat: number; lng: number } | null>(null);
+  // Set once the lookup has resolved a place. While it is set the venue
+  // details render as a card rather than a form — see ResolvedVenueCard.
+  const [resolvedPlace, setResolvedPlace] = useState<VenueSuggestion | null>(null);
+  // The Edit button behind the card. Sticky once opened: someone who chose to
+  // edit should not have the fields yanked away again.
+  const [editingDetails, setEditingDetails] = useState(false);
   const [nights, setNights] = useState<string[]>([]);
   const [startTime, setStartTime] = useState('20:00');
   const [endTime, setEndTime] = useState('00:00');
@@ -130,6 +136,10 @@ export default function AddSpotScreen() {
   useEffect(() => {
     getSessionToken().then(setToken).catch(() => setToken(null));
   }, []);
+
+  // Details render as a card, not a form, whenever the lookup has resolved the
+  // place and the user has not asked to edit.
+  const showVenueCard = !!resolvedPlace && !editingDetails;
 
   const toggleNight = (day: string) => {
     setNights((prev) =>
@@ -348,6 +358,10 @@ export default function AddSpotScreen() {
         existing_venue_id: usingPickedVenue ? matchedVenue!.id : undefined,
         lat: !usingPickedVenue && pickedCoords ? pickedCoords.lat : undefined,
         lng: !usingPickedVenue && pickedCoords ? pickedCoords.lng : undefined,
+        // The resolved place travels with the submission so the server never
+        // has to guess which venue this was.
+        place_provider: !usingPickedVenue ? resolvedPlace?.place_provider ?? undefined : undefined,
+        place_ref: !usingPickedVenue ? resolvedPlace?.place_ref ?? undefined : undefined,
       });
       setSuccess(res.message);
 
@@ -536,28 +550,51 @@ export default function AddSpotScreen() {
                   setWebsite((prev) => prev || s.website || '');
                   setInstagram((prev) => prev || s.instagram || '');
                   setFacebook((prev) => prev || s.facebook || '');
+                  setResolvedPlace(s);
+                  setEditingDetails(false);
                 }}
               />
 
-              {/* One field for the whole address. There is no separate state
-                  input: the server parses the state off the tail, and asking
-                  someone to split an address they can already read off a
+              {/* Resolved: show what we found, not a form to re-type it.
+                  Unresolved or explicitly editing: one field for the whole
+                  address — the server parses the state off the tail, and
+                  asking someone to split an address they can read off a
                   storefront was pure friction. */}
-              <Text style={styles.fieldLabel}>Address *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Filled in by the lookup, or type the full address"
-                placeholderTextColor={Colors.textMute}
-                value={address}
-                onChangeText={(t) => {
-                  setAddress(t);
-                  // Hand-edited after accepting: the coordinates and the state
-                  // no longer describe what is in the field.
-                  setPickedCoords(null);
-                  setStateCode('');
-                }}
-                multiline
-              />
+              {showVenueCard ? (
+                <ResolvedVenueCard
+                  name={name}
+                  address={address}
+                  phone={phone}
+                  website={website}
+                  instagram={instagram}
+                  facebook={facebook}
+                  openingHours={resolvedPlace?.opening_hours}
+                  onEdit={() => setEditingDetails(true)}
+                  onChangeVenue={() => {
+                    setResolvedPlace(null);
+                    setPickedCoords(null);
+                    setStateCode('');
+                  }}
+                />
+              ) : (
+                <>
+                  <Text style={styles.fieldLabel}>Address *</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Filled in by the lookup, or type the full address"
+                    placeholderTextColor={Colors.textMute}
+                    value={address}
+                    onChangeText={(t) => {
+                      setAddress(t);
+                      // Hand-edited after accepting: the coordinates and the
+                      // state no longer describe what is in the field.
+                      setPickedCoords(null);
+                      setStateCode('');
+                    }}
+                    multiline
+                  />
+                </>
+              )}
               {/* No nights picker here — this card describes the venue, and
                   the one in Show Details below is bound to the same state and
                   shown for both flows. Two of them was always a mirror. */}
@@ -582,7 +619,9 @@ export default function AddSpotScreen() {
             </View>
           </View>
 
-          {!venueConfirmed && (
+          {/* Contact details live on the card once we have resolved the place;
+              this block is the Edit path and the no-match path. */}
+          {!venueConfirmed && !showVenueCard && (
             <>
               <Text style={styles.fieldLabel}>Venue Contact Phone (optional)</Text>
               <TextInput
@@ -625,6 +664,13 @@ export default function AddSpotScreen() {
                 autoCapitalize="none"
               />
 
+            </>
+          )}
+
+          {/* Always asked, never enriched: no provider can tell us what a room
+              feels like. */}
+          {!venueConfirmed && (
+            <>
               <Text style={styles.fieldLabel}>Vibe (optional)</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}

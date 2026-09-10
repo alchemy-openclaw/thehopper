@@ -511,6 +511,14 @@ def init_db() -> None:
         scols = {row["name"] for row in conn.execute("PRAGMA table_info(venue_submissions)")}
         if "facebook" not in scols:
             conn.execute("ALTER TABLE venue_submissions ADD COLUMN facebook TEXT")
+        # Carry the resolved place through review. Without these the identity
+        # the submitter already established is thrown away at submit and has to
+        # be rediscovered by a name search later — the exact guesswork the
+        # canonical reference exists to avoid.
+        if "place_provider" not in scols:
+            conn.execute("ALTER TABLE venue_submissions ADD COLUMN place_provider TEXT")
+        if "place_ref" not in scols:
+            conn.execute("ALTER TABLE venue_submissions ADD COLUMN place_ref TEXT")
 
         # Bounding-box prefilter for radius queries. Not a spatial index, but
         # lat/lng BETWEEN is a plain range scan this can serve, and it is what
@@ -1922,6 +1930,10 @@ class VenueSubmissionRequest(BaseModel):
     # skips a Nominatim round-trip on the submit path.
     lat: float | None = None
     lng: float | None = None
+    # The place the submitter resolved, so review and enrichment inherit it
+    # instead of re-deriving it from the name.
+    place_provider: str | None = None
+    place_ref: str | None = None
 
 
 class VenueSubmissionResponse(BaseModel):
@@ -4236,13 +4248,14 @@ def submit_venue(req: VenueSubmissionRequest):
             """INSERT INTO venue_submissions
                (name, address, city, lat, lng, karaoke_nights, start_time, end_time,
                 kj_name, phone, website, instagram, facebook, vibe, is_kj,
-                submitter_phone, status)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending')""",
+                submitter_phone, place_provider, place_ref, status)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending')""",
             (
                 req.name.strip(), req.address.strip(), req.city.strip(),
                 lat, lng, nights, req.start_time, req.end_time,
                 req.kj_name, req.phone, req.website, req.instagram, req.facebook,
                 req.vibe, 1 if req.is_kj else 0, submitter_phone,
+                req.place_provider, req.place_ref,
             ),
         )
         submission_id = cur.lastrowid
@@ -4344,8 +4357,8 @@ def approve_submission(submission_id: int):
                (name, address, city, lat, lng, karaoke_nights, start_time, end_time,
                 kj_name, phone, website, instagram, facebook, price_jump_queue,
                 premium_slot_position, premium_slot_price, vibe, source,
-                confidence, state, country)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                confidence, state, country, place_provider, place_ref)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 sub["name"], sub["address"], sub["city"],
                 sub_lat,
@@ -4364,6 +4377,8 @@ def approve_submission(submission_id: int):
                 _state_from_address(sub["address"]),
                 # Country from the coordinates, same rule as the backfill.
                 _country_from_coords(sub_lat, sub_lng),
+                sub["place_provider"] if "place_provider" in sub.keys() else None,
+                sub["place_ref"] if "place_ref" in sub.keys() else None,
             ),
         )
         venue_id = cur.lastrowid
