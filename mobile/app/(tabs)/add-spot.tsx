@@ -19,6 +19,9 @@ import { getGeolocationCached } from '../../src/geo';
 import { VenueLookup, ResolvedVenueCard } from '../../src/venue-lookup';
 import { useKJContext } from '../../src/kj-context';
 import type { KJ, Venue, VenueSuggestion } from '../../src/types';
+import { Switch as PaperSwitch, TextInput as PaperTextInput } from 'react-native-paper';
+import Animated from 'react-native-reanimated';
+import { swapIn, swapOut } from '../../src/motion';
 import {
   Banner,
   Button,
@@ -560,7 +563,11 @@ export default function AddSpotScreen() {
                   address — the server parses the state off the tail, and
                   asking someone to split an address they can read off a
                   storefront was pure friction. */}
+              {/* The swap between "we found it" and "type it yourself" is the
+                  one place on this form where content is replaced wholesale.
+                  Cross-fading it stops the card appearing to teleport. */}
               {showVenueCard ? (
+                <Animated.View entering={swapIn} exiting={swapOut}>
                 <ResolvedVenueCard
                   name={name}
                   address={address}
@@ -576,24 +583,27 @@ export default function AddSpotScreen() {
                     setStateCode('');
                   }}
                 />
+                </Animated.View>
               ) : (
-                <>
-                  <Text style={styles.fieldLabel}>Address *</Text>
-                  <TextInput
-                    style={styles.input}
+                <Animated.View entering={swapIn}>
+                  <PaperTextInput
+                    mode="outlined"
+                    label="Address *"
+                    dense
+                    numberOfLines={3}
                     placeholder="Filled in by the lookup, or type the full address"
-                    placeholderTextColor={Colors.textMute}
                     value={address}
                     onChangeText={(t) => {
-                      setAddress(t);
-                      // Hand-edited after accepting: the coordinates and the
-                      // state no longer describe what is in the field.
-                      setPickedCoords(null);
-                      setStateCode('');
+                    setAddress(t);
+                    // Hand-edited after accepting: the coordinates and the
+                    // state no longer describe what is in the field.
+                    setPickedCoords(null);
+                    setStateCode('');
                     }}
                     multiline
+                    style={styles.paperInput}
                   />
-                </>
+                </Animated.View>
               )}
               {/* No nights picker here — this card describes the venue, and
                   the one in Show Details below is bound to the same state and
@@ -623,45 +633,45 @@ export default function AddSpotScreen() {
               this block is the Edit path and the no-match path. */}
           {!venueConfirmed && !showVenueCard && (
             <>
-              <Text style={styles.fieldLabel}>Venue Contact Phone (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="(321) 555-0100"
-                placeholderTextColor={Colors.textMute}
+              <PaperTextInput
+                mode="outlined"
+                label="Venue Contact Phone (optional)"
+                dense
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
+                style={styles.paperInput}
               />
 
-              <Text style={styles.fieldLabel}>Website (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="https://..."
-                placeholderTextColor={Colors.textMute}
+              <PaperTextInput
+                mode="outlined"
+                label="Website (optional)"
+                dense
                 value={website}
                 onChangeText={setWebsite}
                 keyboardType="url"
                 autoCapitalize="none"
+                style={styles.paperInput}
               />
 
-              <Text style={styles.fieldLabel}>Instagram (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="@venue_handle"
-                placeholderTextColor={Colors.textMute}
+              <PaperTextInput
+                mode="outlined"
+                label="Instagram (optional)"
+                dense
                 value={instagram}
                 onChangeText={setInstagram}
                 autoCapitalize="none"
+                style={styles.paperInput}
               />
 
-              <Text style={styles.fieldLabel}>Facebook (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="venue.page"
-                placeholderTextColor={Colors.textMute}
+              <PaperTextInput
+                mode="outlined"
+                label="Facebook (optional)"
+                dense
                 value={facebook}
                 onChangeText={setFacebook}
                 autoCapitalize="none"
+                style={styles.paperInput}
               />
 
             </>
@@ -671,15 +681,15 @@ export default function AddSpotScreen() {
               feels like. */}
           {!venueConfirmed && (
             <>
-              <Text style={styles.fieldLabel}>Vibe (optional)</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Beach bar, divey, packed on weekends..."
-                placeholderTextColor={Colors.textMute}
+              <PaperTextInput
+                mode="outlined"
+                label="Vibe (optional)"
+                dense
                 value={vibe}
                 onChangeText={setVibe}
                 multiline
-                numberOfLines={2}
+                numberOfLines={3}
+                style={styles.paperInput}
               />
             </>
           )}
@@ -694,12 +704,7 @@ export default function AddSpotScreen() {
                 Onboard as a karaoke host, promote yourself, and get paid for premium slots.
               </Text>
             </View>
-            <Switch
-              value={isKJ}
-              onValueChange={setIsKJ}
-              trackColor={{ false: Colors.border, true: Colors.pink }}
-              thumbColor={isKJ ? '#fff' : Colors.textMute}
-            />
+            <PaperSwitch value={isKJ} onValueChange={setIsKJ} />
           </View>
         </Card>
 
@@ -715,34 +720,34 @@ export default function AddSpotScreen() {
                 You're already onboarded as a KJ. Update your details below.
               </Text>
 
-              <Text style={styles.fieldLabel}>Your name / stage name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="DJ Salty Mike"
-                placeholderTextColor={Colors.textMute}
+              <PaperTextInput
+                mode="outlined"
+                label="Your name / stage name"
+                dense
                 value={kjName}
                 onChangeText={(v) => {
-                  setKJName(v);
-                  setProfileNotice(null);
+                setKJName(v);
+                setProfileNotice(null);
                 }}
+                style={styles.paperInput}
               />
 
-              <Text style={styles.fieldLabel}>Your phone number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="(321) 555-0100"
-                placeholderTextColor={Colors.textMute}
+              <PaperTextInput
+                mode="outlined"
+                label="Your phone number"
+                dense
                 value={submitterPhone}
                 onChangeText={(v) => {
-                  setSubmitterPhone(v);
-                  setProfileNotice(null);
-                  // Any further edit invalidates a code already sent or a
-                  // number already proved.
-                  setNewPhoneToken(null);
-                  setCodeSent(false);
-                  setCode('');
+                setSubmitterPhone(v);
+                setProfileNotice(null);
+                // Any further edit invalidates a code already sent or a
+                // number already proved.
+                setNewPhoneToken(null);
+                setCodeSent(false);
+                setCode('');
                 }}
                 keyboardType="phone-pad"
+                style={styles.paperInput}
               />
 
               {/* Changing the number re-keys the account, so prove the new one. */}
@@ -761,16 +766,16 @@ export default function AddSpotScreen() {
                     </>
                   ) : (
                     <View>
-                      <Text style={styles.fieldLabel}>Enter the code we sent you</Text>
                       <View style={styles.codeRow}>
-                        <TextInput
-                          style={[styles.input, { flex: 1 }]}
-                          placeholder="123456"
-                          placeholderTextColor={Colors.textMute}
+                        <PaperTextInput
+                          mode="outlined"
+                          label="Enter the code we sent you"
+                          dense
                           value={code}
                           onChangeText={setCode}
                           keyboardType="number-pad"
                           maxLength={6}
+                          style={[styles.paperInput, { flex: 1 }]}
                         />
                         <Button
                           label={verifying ? '...' : 'Verify'}
@@ -807,23 +812,23 @@ export default function AddSpotScreen() {
           <View>
             <Text style={styles.sectionLabel}>KJ Onboarding</Text>
             <Card>
-              <Text style={styles.fieldLabel}>Your name / stage name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="DJ Salty Mike"
-                placeholderTextColor={Colors.textMute}
+              <PaperTextInput
+                mode="outlined"
+                label="Your name / stage name"
+                dense
                 value={kjName}
                 onChangeText={setKJName}
+                style={styles.paperInput}
               />
 
-              <Text style={styles.fieldLabel}>Your phone number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="(321) 555-0100"
-                placeholderTextColor={Colors.textMute}
+              <PaperTextInput
+                mode="outlined"
+                label="Your phone number"
+                dense
                 value={submitterPhone}
                 onChangeText={setSubmitterPhone}
                 keyboardType="phone-pad"
+                style={styles.paperInput}
               />
 
               {/* Phone verification */}
@@ -837,16 +842,16 @@ export default function AddSpotScreen() {
                     />
                   ) : (
                     <View>
-                      <Text style={styles.fieldLabel}>Enter the code we sent you</Text>
                       <View style={styles.codeRow}>
-                        <TextInput
-                          style={[styles.input, { flex: 1 }]}
-                          placeholder="123456"
-                          placeholderTextColor={Colors.textMute}
+                        <PaperTextInput
+                          mode="outlined"
+                          label="Enter the code we sent you"
+                          dense
                           value={code}
                           onChangeText={setCode}
                           keyboardType="number-pad"
                           maxLength={6}
+                          style={[styles.paperInput, { flex: 1 }]}
                         />
                         <Button
                           label={verifying ? '...' : 'Verify'}
@@ -911,15 +916,15 @@ function KJOnboardingResult({
           Your spot is pending approval. In the meantime, set up Stripe to get paid for premium slots.
         </Text>
 
-        <Text style={styles.fieldLabel}>Email for Stripe</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="you@example.com"
-          placeholderTextColor={Colors.textMute}
+        <PaperTextInput
+          mode="outlined"
+          label="Email for Stripe"
+          dense
           value={email}
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
+          style={styles.paperInput}
         />
 
         <Button
@@ -958,26 +963,16 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },
+  paperInput: {
+    backgroundColor: Colors.bg2,
+    marginBottom: Spacing.sm,
+  },
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: Colors.textDim,
     marginTop: Spacing.sm,
     marginBottom: 4,
-  },
-  input: {
-    minHeight: TAP_HEIGHT,
-    backgroundColor: Colors.bg2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 14,
-    color: Colors.text,
-    fontSize: 16,
-  },
-  textArea: {
-    minHeight: 80,
-    paddingVertical: 10,
   },
   timeRow: { flexDirection: 'row' },
   toggleCard: { marginTop: Spacing.md },

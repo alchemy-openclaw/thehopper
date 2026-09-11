@@ -58,6 +58,8 @@ from seed_data import SONGS, VENUES
 # Imported by name so existing call sites are unchanged.
 from display_format import (
     US_STATES,
+    canonical_address_key,
+    canonical_street_key,
     US_STATE_NAMES,
     _display_address,
     _display_city,
@@ -901,6 +903,48 @@ def _find_place_for_venue(row: sqlite3.Row) -> tuple[str, str] | None:
     return None
 
 
+def _apply_enrichment(
+    conn: sqlite3.Connection,
+    venue_id: int,
+    provider: str | None,
+    ref: str | None,
+    place: dict[str, Any] | None,
+    newly_linked: bool,
+) -> dict[str, Any]:
+    """Write the result of an already-completed lookup. No network here.
+
+    Always stamps enriched_at, even on failure, so a venue no provider knows
+    cannot sit permanently at the front of the queue.
+    """
+    row = conn.execute("SELECT name FROM venues WHERE id = ?", (venue_id,)).fetchone()
+    result: dict[str, Any] = {
+        "venue_id": venue_id,
+        "name": row["name"] if row else None,
+        "written": [],
+    }
+    if newly_linked and provider and ref:
+        conn.execute(
+            "UPDATE venues SET place_provider = ?, place_ref = ? WHERE id = ?",
+            (provider, ref, venue_id),
+        )
+        result["linked"] = f"{provider}:{ref}"
+
+    if place is None:
+        conn.execute(
+            "UPDATE venues SET enriched_at = datetime('now') WHERE id = ?", (venue_id,)
+        )
+        result["status"] = "unmatched" if not (provider and ref) else "fetch_failed"
+        return result
+
+    fields = {k: v for k, v in _place_to_fields(place).items() if k in ENRICHABLE_FIELDS}
+    result["written"] = _write_fields(conn, venue_id, fields, "enrichment")
+    conn.execute(
+        "UPDATE venues SET enriched_at = datetime('now') WHERE id = ?", (venue_id,)
+    )
+    result["status"] = "enriched"
+    return result
+
+
 def enrich_venue(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
     """Bring one venue up to date from its place provider.
 
@@ -982,79 +1026,341 @@ def repair_stamped_coordinates(dry_run: bool = True) -> dict[str, Any]:
             (STAMPED_COORD_MIN_CLUSTER,),
         ).fetchall()
         report["clusters"] = len(clusters)
-
+        candidates: list[sqlite3.Row] = []
         for cluster in clusters:
-            rows = conn.execute(
-                "SELECT * FROM venues WHERE lat = ? AND lng = ?",
-                (cluster["lat"], cluster["lng"]),
-            ).fetchall()
-            for row in rows:
-                centroid = _city_centroid(row["city"] or "")
-                found = None
-                # Query with the geocoder's own name for the city rather than
-                # our stored value — that column holds slugs like
-                # "melbourne-vic-au", which is not a place any search
-                # understands.
-                city_q = (centroid.display if centroid and centroid.display
-                          else (row["city"] or "").strip())
-                try:
-                    results = _nominatim(
-                        "search",
-                        {
-                            "q": ", ".join(p for p in ((row["name"] or "").strip(), city_q) if p),
-                            "format": "jsonv2", "limit": 5, "addressdetails": 1,
-                        },
-                    )
-                except Exception:
-                    results = []
-                for r in results or []:
-                    if not r.get("osm_type") or r.get("osm_id") is None:
-                        continue
-                    r_lat, r_lng = float(r["lat"]), float(r["lon"])
-                    # Sanity: the match has to be in the right metro. Without a
-                    # centroid we cannot check, so we decline rather than guess.
-                    if centroid is None:
-                        continue
-                    if haversine_miles(centroid.lat, centroid.lng, r_lat, r_lng) > CITY_SANITY_MILES:
-                        continue
-                    found = (r_lat, r_lng, f"{r['osm_type']}/{r['osm_id']}")
-                    break
+            candidates.extend(
+                conn.execute(
+                    "SELECT * FROM venues WHERE lat = ? AND lng = ?",
+                    (cluster["lat"], cluster["lng"]),
+                ).fetchall()
+            )
 
-                if not found:
-                    report["unresolved"].append(
-                        {"id": row["id"], "name": row["name"], "city": row["city"]}
-                    )
-                    continue
+    # Outside the transaction from here. _city_centroid and _nominatim both
+    # make network calls, and _city_centroid writes its own cache row; holding
+    # a write transaction across that is exactly what deadlocked enrich_batch.
+    for row in candidates:
+        centroid = _city_centroid(row["city"] or "")
+        # Query with the geocoder's own name for the city rather than our
+        # stored value — that column holds slugs like "melbourne-vic-au",
+        # which is not a place any search understands.
+        city_q = (
+            centroid.display if centroid and centroid.display else (row["city"] or "").strip()
+        )
+        try:
+            results = _nominatim(
+                "search",
+                {
+                    "q": ", ".join(p for p in ((row["name"] or "").strip(), city_q) if p),
+                    "format": "jsonv2",
+                    "limit": 5,
+                    "addressdetails": 1,
+                },
+            )
+        except Exception:
+            results = []
 
-                r_lat, r_lng, ref = found
-                report["repaired"].append(
-                    {
-                        "id": row["id"], "name": row["name"], "place_ref": ref,
-                        "from": [row["lat"], row["lng"]], "to": [r_lat, r_lng],
-                        "moved_miles": round(
-                            haversine_miles(row["lat"], row["lng"], r_lat, r_lng), 2
-                        ),
-                    }
+        found = None
+        for r in results or []:
+            if not r.get("osm_type") or r.get("osm_id") is None:
+                continue
+            # Sanity: the match has to be in the right metro. Without a
+            # centroid we cannot check, so we decline rather than guess.
+            if centroid is None:
+                continue
+            r_lat, r_lng = float(r["lat"]), float(r["lon"])
+            if haversine_miles(centroid.lat, centroid.lng, r_lat, r_lng) > CITY_SANITY_MILES:
+                continue
+            found = (r_lat, r_lng, f"{r['osm_type']}/{r['osm_id']}")
+            break
+
+        if not found:
+            report["unresolved"].append(
+                {"id": row["id"], "name": row["name"], "city": row["city"]}
+            )
+            continue
+
+        r_lat, r_lng, ref = found
+        report["repaired"].append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "place_ref": ref,
+                "from": [row["lat"], row["lng"]],
+                "to": [r_lat, r_lng],
+                "moved_miles": round(haversine_miles(row["lat"], row["lng"], r_lat, r_lng), 2),
+            }
+        )
+        if not dry_run:
+            # One short transaction per row, for the same reason.
+            with db() as conn:
+                _write_fields(conn, row["id"], {"lat": r_lat, "lng": r_lng}, "enrichment")
+                conn.execute(
+                    "UPDATE venues SET place_provider = 'osm', place_ref = ? WHERE id = ?",
+                    (ref, row["id"]),
                 )
-                if not dry_run:
-                    _write_fields(conn, row["id"], {"lat": r_lat, "lng": r_lng}, "enrichment")
-                    conn.execute(
-                        "UPDATE venues SET place_provider = 'osm', place_ref = ? WHERE id = ?",
-                        (ref, row["id"]),
-                    )
+
     return report
 
 
+# Canonical night order, so a merged schedule reads Monday-first rather than
+# in whatever order the duplicates happened to be written.
+DAY_ORDER = (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+)
+
+
+# ---------------------------------------------------------------------------
+# Duplicate detection and merging
+# ---------------------------------------------------------------------------
+#
+# _check_duplicate_venue runs on the two submission paths and nowhere else, so
+# the bulk-imported directory has never been checked at all. That is where the
+# duplicates came from — not from the matching being weak.
+#
+# Two keys, used in that order:
+#
+#   1. place_ref. Two rows enriched to the same provider place ARE the same
+#      venue. Deterministic, not a heuristic, and the reason enrichment is a
+#      prerequisite for a clean sweep rather than a nice-to-have.
+#
+#   2. normalized name + city, for rows enrichment could not link. This is the
+#      existing fuzzy matcher, reused rather than reinvented.
+#
+# Soundex was considered and rejected: it encodes *pronunciation*, for cases
+# like Smith/Smyth. The duplicates here differ by letter case and punctuation,
+# which _normalize_venue_name already folds away — "SHADY OAKS LOUNGE &
+# PACKAGE" and "Shady Oaks Lounge & Package" both reduce to
+# "shady oaks and package" today. Soundex would add false positives (it
+# happily collides unrelated short names) without catching anything new.
+
+# Every table holding a venue_id. A merge that misses one silently orphans a
+# lineup, a payment or a chat history.
+VENUE_CHILD_TABLES = (
+    "payments", "kj_messages", "venue_chat", "venue_submissions",
+    "devices", "lineup", "kj_products", "venue_field_provenance",
+)
+
+
+# Two rows for one venue can disagree about the address text and still sit a
+# few hundred feet apart; two different venues sharing a street name will not.
+SAME_PLACE_MILES = 1.0
+
+
+def _nearest_cluster(members: list[sqlite3.Row]) -> list[sqlite3.Row]:
+    """The largest set of rows that are all near the first one.
+
+    Anchored on the oldest row rather than doing full clustering: the group is
+    about to be merged into that row anyway, so "near the survivor" is the
+    question that matters.
+    """
+    anchor = members[0]
+    return [
+        m for m in members
+        if haversine_miles(anchor["lat"], anchor["lng"], m["lat"], m["lng"]) <= SAME_PLACE_MILES
+    ]
+
+
+def find_duplicate_groups() -> list[dict[str, Any]]:
+    """Groups of venue rows that are the same real venue.
+
+    Reports rather than acts: the merge is a separate, explicit step.
+    """
+    with db() as conn:
+        rows = conn.execute("SELECT * FROM venues ORDER BY id").fetchall()
+
+    # Three keys, strongest first. Each venue lands in at most one group, so a
+    # row matched definitively by place_ref is not also re-matched by a weaker
+    # heuristic.
+    #
+    #   place_ref     — same provider place. Proof, not inference. Only covers
+    #                   the ~1 in 5 of the directory OSM actually knows.
+    #   name+street   — same venue name at the same canonical street line,
+    #                   confirmed by proximity rather than by the city text.
+    #                   The city column is the part that cannot be trusted:
+    #                   the Fishlips row says Cape Canaveral when the bar is
+    #                   in Port Canaveral, which defeats any name+city test.
+    #                   Proximity is what stops "Joe's Bar, 1 Main St" in two
+    #                   different towns collapsing into one.
+    #   name+city     — the original fallback, for rows with no usable address.
+    buckets: list[tuple[str, dict[Any, list[sqlite3.Row]]]] = [
+        ("place_ref", {}), ("name+street", {}), ("name+city", {}),
+    ]
+    for r in rows:
+        ref = r["place_ref"] if "place_ref" in r.keys() else None
+        norm_name = _normalize_venue_name(r["name"])
+        if ref:
+            buckets[0][1].setdefault(f"{r['place_provider']}:{ref}", []).append(r)
+        elif norm_name and canonical_street_key(r["address"]):
+            buckets[1][1].setdefault((norm_name, canonical_street_key(r["address"])), []).append(r)
+        elif norm_name:
+            buckets[2][1].setdefault((norm_name, _normalize_city(r["city"])), []).append(r)
+
+    groups: list[dict[str, Any]] = []
+    for match, bucket in buckets:
+      for key, members in bucket.items():
+        if len(members) < 2:
+            continue
+        if match == "name+street":
+            # Same name and street text is not enough on its own — split the
+            # bucket into clusters that are actually near each other.
+            members = _nearest_cluster(members)
+            if len(members) < 2:
+                continue
+        groups.append(
+            {
+                "match": match,
+                "key": key if isinstance(key, str) else f"{key[0]} @ {key[1]}",
+                # Oldest id wins: it is the one other rows are most likely to
+                # already reference.
+                "keep": members[0]["id"],
+                "drop": [m["id"] for m in members[1:]],
+                "rows": [
+                    {
+                        "id": m["id"], "name": m["name"], "address": m["address"],
+                        "nights": m["karaoke_nights"], "kj_id": m["kj_id"],
+                    }
+                    for m in members
+                ],
+            }
+        )
+    return groups
+
+
+def merge_venue_group(conn: sqlite3.Connection, keep_id: int, drop_ids: list[int]) -> dict[str, Any]:
+    """Fold duplicate rows into one, losing nothing.
+
+    Nights are unioned, because two scrapes of the same bar often each caught
+    a different night. Empty fields on the survivor are filled from the
+    duplicates — a row with a phone number should not lose it to a row without
+    one. Provenance is respected: a field a person supplied is never replaced
+    by a duplicate's value.
+    """
+    keep = conn.execute("SELECT * FROM venues WHERE id = ?", (keep_id,)).fetchone()
+    if keep is None:
+        return {"keep": keep_id, "error": "missing"}
+    dropped = [
+        conn.execute("SELECT * FROM venues WHERE id = ?", (d,)).fetchone() for d in drop_ids
+    ]
+    dropped = [d for d in dropped if d is not None]
+
+    nights = {n for n in (keep["karaoke_nights"] or "").split(",") if n}
+    for d in dropped:
+        nights.update(n for n in (d["karaoke_nights"] or "").split(",") if n)
+    ordered = [d for d in DAY_ORDER if d in nights]
+
+    fill: dict[str, Any] = {}
+    for field in ("phone", "website", "instagram", "facebook", "vibe", "image_url",
+                  "kj_name", "state", "country", "place_provider", "place_ref",
+                  "opening_hours"):
+        if field not in keep.keys() or keep[field]:
+            continue
+        for d in dropped:
+            if field in d.keys() and d[field]:
+                fill[field] = d[field]
+                break
+
+    # A KJ claim on any duplicate must survive the merge.
+    if not keep["kj_id"]:
+        for d in dropped:
+            if d["kj_id"]:
+                fill["kj_id"] = d["kj_id"]
+                break
+
+    conn.execute(
+        "UPDATE venues SET karaoke_nights = ? WHERE id = ?", (",".join(ordered), keep_id)
+    )
+    if fill:
+        conn.execute(
+            f"UPDATE venues SET {', '.join(f'{k} = ?' for k in fill)} WHERE id = ?",
+            (*fill.values(), keep_id),
+        )
+
+    moved: dict[str, int] = {}
+    for table in VENUE_CHILD_TABLES:
+        for d in drop_ids:
+            if table == "venue_field_provenance":
+                # Provenance is keyed (venue_id, field); a blind repoint would
+                # collide with the survivor's own rows. The survivor's
+                # provenance is the one that matters, so drop the rest.
+                cur = conn.execute("DELETE FROM venue_field_provenance WHERE venue_id = ?", (d,))
+            else:
+                cur = conn.execute(
+                    f"UPDATE {table} SET venue_id = ? WHERE venue_id = ?", (keep_id, d)
+                )
+            if cur.rowcount:
+                moved[table] = moved.get(table, 0) + cur.rowcount
+
+    for d in drop_ids:
+        conn.execute("DELETE FROM venues WHERE id = ?", (d,))
+
+    return {
+        "keep": keep_id,
+        "dropped": drop_ids,
+        "nights": ",".join(ordered),
+        "filled": sorted(fill),
+        "rows_repointed": moved,
+    }
+
+
+def dedupe_venues(dry_run: bool = True) -> dict[str, Any]:
+    """Find and optionally merge duplicate venues."""
+    groups = find_duplicate_groups()
+    result: dict[str, Any] = {
+        "dry_run": dry_run,
+        "groups": len(groups),
+        "rows_affected": sum(len(g["drop"]) for g in groups),
+        "detail": groups,
+    }
+    if dry_run:
+        return result
+    merged = []
+    with db() as conn:
+        for g in groups:
+            merged.append(merge_venue_group(conn, g["keep"], g["drop"]))
+    result["merged"] = merged
+    return result
+
+
 def enrich_batch(limit: int = 50) -> list[dict[str, Any]]:
-    """Enrich the venues least recently seen. NULL enriched_at sorts first."""
+    """Enrich the venues least recently seen. NULL enriched_at sorts first.
+
+    One connection per venue, deliberately. Enriching a venue makes network
+    calls that take a second each, and _city_centroid opens its own connection
+    to cache a centroid it had to look up. Holding the batch's write
+    transaction open across all of that deadlocks SQLite the moment a city is
+    not already cached — which is why a batch of 10 could pass while 40 failed.
+    A transaction must never span a network call.
+    """
     with db() as conn:
         rows = conn.execute(
-            """SELECT * FROM venues
+            """SELECT id FROM venues
                ORDER BY enriched_at IS NOT NULL, enriched_at ASC
                LIMIT ?""",
             (limit,),
         ).fetchall()
-        return [enrich_venue(conn, r) for r in rows]
+    venue_ids = [r["id"] for r in rows]
+
+    results: list[dict[str, Any]] = []
+    for venue_id in venue_ids:
+        # Re-read inside its own short transaction: the row may have been
+        # enriched by a concurrent batch since the id list was taken.
+        with db() as conn:
+            row = conn.execute("SELECT * FROM venues WHERE id = ?", (venue_id,)).fetchone()
+        if row is None:
+            continue
+        # Resolve the place outside any transaction — this is the slow part.
+        linked: tuple[str, str] | None = None
+        if not (row["place_provider"] and row["place_ref"]):
+            linked = _find_place_for_venue(row)
+        place = None
+        provider = linked[0] if linked else row["place_provider"]
+        ref = linked[1] if linked else row["place_ref"]
+        if provider and ref:
+            place = _fetch_place(provider, ref)
+
+        with db() as conn:
+            results.append(_apply_enrichment(conn, venue_id, provider, ref, place, bool(linked)))
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -4281,6 +4587,22 @@ def admin_enrich(limit: int = Query(50, ge=1, le=500)):
     for r in results:
         summary[r.get("status", "unknown")] = summary.get(r.get("status", "unknown"), 0) + 1
     return {"processed": len(results), "summary": summary, "results": results}
+
+
+@app.get(f"{API_PREFIX}/admin/duplicates")
+def admin_duplicates():
+    """Report venues that look like the same place. Read-only."""
+    return dedupe_venues(dry_run=True)
+
+
+@app.post(f"{API_PREFIX}/admin/dedupe")
+def admin_dedupe(dry_run: bool = Query(True)):
+    """Merge duplicate venues. Defaults to a dry run — this deletes rows.
+
+    Run enrichment first: with place_ref populated the grouping is exact
+    rather than a name heuristic, and far more of the directory is covered.
+    """
+    return dedupe_venues(dry_run=dry_run)
 
 
 @app.post(f"{API_PREFIX}/admin/repair-coordinates")

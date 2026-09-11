@@ -19,9 +19,16 @@
  */
 
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import {
+  Button as PaperButton,
+  Icon,
+  List,
+  Surface,
+  TextInput as PaperTextInput,
+} from 'react-native-paper';
 import { api } from './api';
-import { getLastKnownGeo, type Coords } from './geo';
+import { getAnchorQuietly, type Coords } from './geo';
 import type { VenueSuggestion } from './types';
 import { Colors, Radius, Spacing, TAP_HEIGHT } from './theme';
 
@@ -64,9 +71,9 @@ export function ResolvedVenueCard({
   if (openingHours) rows.push({ label: 'Venue hours', value: openingHours });
 
   return (
-    <View style={styles.resolved}>
+    <Surface style={styles.resolved} elevation={1}>
       <View style={styles.resolvedHead}>
-        <Text style={styles.resolvedTick}>✓</Text>
+        <Icon source="check-circle-outline" size={15} color={Colors.cyan} />
         <Text style={styles.resolvedFound}>Found it</Text>
       </View>
 
@@ -93,24 +100,16 @@ export function ResolvedVenueCard({
       </Text>
 
       <View style={styles.resolvedActions}>
-        <Pressable
-          onPress={onEdit}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.resolvedBtn, pressed && styles.resolvedBtnPressed]}
-        >
-          <Text style={styles.resolvedBtnText}>Edit details</Text>
-        </Pressable>
+        <PaperButton mode="contained-tonal" icon="pencil-outline" onPress={onEdit} compact>
+          Edit details
+        </PaperButton>
         {onChangeVenue && (
-          <Pressable
-            onPress={onChangeVenue}
-            accessibilityRole="button"
-            style={({ pressed }) => [styles.resolvedBtnGhost, pressed && styles.resolvedBtnPressed]}
-          >
-            <Text style={styles.resolvedBtnGhostText}>Not this place</Text>
-          </Pressable>
+          <PaperButton mode="text" onPress={onChangeVenue} compact textColor={Colors.textMute}>
+            Not this place
+          </PaperButton>
         )}
       </View>
-    </View>
+    </Surface>
   );
 }
 
@@ -145,22 +144,29 @@ export function VenueLookup({
   const [note, setNote] = useState<string | null>(null);
   const [anchor, setAnchor] = useState<Coords | null>(null);
 
-  // Read-only: reuses a fix from an earlier search and never prompts. Asking
-  // for the location permission because someone typed a bar name is the wrong
-  // trade — the backend falls back to its own default anchor without it.
+  // Never prompts. Uses a live fix when location is already permitted, so
+  // someone who has allowed it gets nearby results on their very first search
+  // rather than having to run a near-me search first to seed the cache; falls
+  // back to a remembered fix, then to nothing.
   useEffect(() => {
-    let live = true;
-    getLastKnownGeo().then((c) => {
-      if (live) setAnchor(c);
+    let alive = true;
+    getAnchorQuietly().then((c) => {
+      if (alive) setAnchor(c);
     });
     return () => {
-      live = false;
+      alive = false;
     };
   }, []);
 
   const search = async () => {
     if (name.trim().length < 2) {
       setNote('Enter the venue name first.');
+      return;
+    }
+    // City is only needed when we have no idea where the user is. With an
+    // anchor the name alone is enough, and the server biases to it.
+    if (!city.trim() && !anchor) {
+      setNote('Add a city — we need somewhere to search near.');
       return;
     }
     setSearching(true);
@@ -189,59 +195,73 @@ export function VenueLookup({
 
   return (
     <View style={styles.wrap}>
-      <Text style={[styles.label, labelStyle]}>Venue name *</Text>
-      <TextInput
-        style={styles.input}
+      <PaperTextInput
+        mode="outlined"
+        label="Venue name"
         placeholder="e.g. Coconuts on the Beach"
-        placeholderTextColor={Colors.textMute}
         value={name}
         onChangeText={onChangeName}
         autoCapitalize="words"
+        dense
+        style={styles.paperInput}
       />
 
-      <Text style={[styles.label, labelStyle]}>City *</Text>
-      <TextInput
-        style={styles.input}
+      <PaperTextInput
+        mode="outlined"
+        label={anchor ? 'City (optional)' : 'City'}
         placeholder="e.g. Cocoa Beach"
-        placeholderTextColor={Colors.textMute}
         value={city}
         onChangeText={onChangeCity}
         onSubmitEditing={search}
         returnKeyType="search"
         autoCapitalize="words"
+        dense
+        style={styles.paperInput}
       />
 
-      <Pressable
-        onPress={search}
+      {/* `loading` gives Paper's own spinner in place of the label, so the
+          button keeps its width and does not jump while a search runs. */}
+      <PaperButton
+        mode="contained"
+        icon="map-search-outline"
+        loading={searching}
         disabled={searching}
-        style={({ pressed }) => [
-          styles.btn,
-          pressed && styles.btnPressed,
-          searching && styles.btnBusy,
-        ]}
+        onPress={search}
+        contentStyle={styles.btnContent}
+        style={styles.btn}
       >
-        {searching ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.btnText}>Look up the address</Text>
-        )}
-      </Pressable>
+        {searching ? 'Looking…' : 'Look up the address'}
+      </PaperButton>
 
       {note ? <Text style={styles.note}>{note}</Text> : null}
 
       {results && results.length > 0 && (
         <View style={styles.results}>
+          <Text style={styles.resultsHint}>
+            {results.length === 1 ? 'Found this — tap to use it:' : 'Tap the right one to use it:'}
+          </Text>
           {results.map((s) => (
-            <Pressable
+            <List.Item
               key={`${s.lat},${s.lng},${s.label}`}
               onPress={() => accept(s)}
-              style={({ pressed }) => [styles.result, pressed && styles.resultPressed]}
-            >
-              {s.name ? <Text style={styles.resultName}>{s.name}</Text> : null}
-              <Text style={styles.resultAddr}>{s.label}</Text>
-              {extrasNote(s) ? <Text style={styles.resultExtras}>{extrasNote(s)}</Text> : null}
-              <Text style={styles.resultUse}>Use this →</Text>
-            </Pressable>
+              title={s.name ?? s.address}
+              titleStyle={styles.resultName}
+              description={() => (
+                <View>
+                  <Text style={styles.resultAddr}>{s.label}</Text>
+                  {extrasNote(s) ? (
+                    <Text style={styles.resultExtras}>{extrasNote(s)}</Text>
+                  ) : null}
+                </View>
+              )}
+              right={() => (
+                <View style={styles.resultAction}>
+                  <Text style={styles.resultUse}>Use this</Text>
+                  <Icon source="arrow-right-circle" size={18} color={Colors.cyan} />
+                </View>
+              )}
+              style={styles.result}
+            />
           ))}
         </View>
       )}
@@ -259,7 +279,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   resolvedHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.sm },
-  resolvedTick: { color: Colors.cyan, fontSize: 13, fontWeight: '800' },
   resolvedFound: {
     color: Colors.cyan, fontSize: 11, fontWeight: '800',
     letterSpacing: 1, textTransform: 'uppercase',
@@ -278,30 +297,9 @@ const styles = StyleSheet.create({
   resolvedRowValue: { color: Colors.text, fontSize: 13, flex: 1 },
   resolvedNote: { color: Colors.textMute, fontSize: 12, marginTop: Spacing.md, lineHeight: 17 },
   resolvedActions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.md },
-  resolvedBtn: {
-    minHeight: 44, paddingHorizontal: Spacing.lg, borderRadius: Radius.sm,
-    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.panel2,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  resolvedBtnText: { color: Colors.text, fontSize: 14, fontWeight: '700' },
-  resolvedBtnGhost: {
-    minHeight: 44, paddingHorizontal: Spacing.md, borderRadius: Radius.sm,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  resolvedBtnGhostText: { color: Colors.textMute, fontSize: 14, fontWeight: '600' },
-  resolvedBtnPressed: { opacity: 0.85 },
   wrap: { marginBottom: Spacing.xs },
-  label: { color: Colors.textDim, fontSize: 13, fontWeight: '600', marginTop: Spacing.md, marginBottom: 6 },
-  input: {
-    height: TAP_HEIGHT,
-    backgroundColor: Colors.bg2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 14,
-    color: Colors.text,
-    fontSize: 16,
-  },
+  paperInput: { backgroundColor: Colors.bg2, marginBottom: Spacing.sm },
+  btnContent: { height: TAP_HEIGHT },
   btn: {
     height: TAP_HEIGHT,
     marginTop: Spacing.md,
@@ -310,9 +308,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnPressed: { opacity: 0.85 },
-  btnBusy: { opacity: 0.7 },
-  btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   note: { color: Colors.textDim, fontSize: 13, marginTop: Spacing.sm },
   results: {
     marginTop: Spacing.sm,
@@ -328,9 +323,27 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
     backgroundColor: Colors.bg2,
   },
-  resultPressed: { backgroundColor: Colors.panel2 },
   resultName: { color: Colors.text, fontSize: 15, fontWeight: '700' },
   resultAddr: { color: Colors.textDim, fontSize: 14, marginTop: 2 },
+  resultsHint: {
+    color: Colors.textDim,
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 2,
+  },
+  resultAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'center',
+    paddingLeft: Spacing.sm,
+  },
+  resultUse: {
+    color: Colors.cyan,
+    fontSize: 13,
+    fontWeight: '800',
+  },
   resultExtras: { color: Colors.cyan, fontSize: 12, marginTop: 4 },
-  resultUse: { color: Colors.cyan, fontSize: 12, fontWeight: '700', marginTop: 6 },
 });

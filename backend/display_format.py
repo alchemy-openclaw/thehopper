@@ -194,6 +194,60 @@ def _display_address(raw: str | None) -> str | None:
     return ", ".join(out_segments)
 
 
+# Unit / occupancy designators. Stripped before building a dedup key because
+# they are the single most common way one real venue produces two rows —
+# "#13&14" and "#1314" are the same suite written by two different scrapes.
+# They also break every address parser worth trying: usaddress reads the "&"
+# in "#13&14" as a street intersection, and usaddress-scourgify raises
+# UnParseableAddressError on it outright. Removing the unit first fixes both,
+# and a unit number is not what tells two venues apart anyway.
+_UNIT_RE = re.compile(
+    r"[,\s]*(?:#|\bapt\.?\b|\bsuite\b|\bste\.?\b|\bunit\b|\bbldg\.?\b|\brm\.?\b)\s*[\w&/\-]*",
+    re.I,
+)
+
+
+def canonical_street_key(address: str | None) -> str:
+    """Just the street line, canonicalised. No locality.
+
+    Kept separate from canonical_address_key because the locality is exactly
+    the part that cannot be trusted: the Fishlips row says Cape Canaveral when
+    the bar is in Port Canaveral. Callers that pair this with a proximity
+    check get the best of both — the street text agreeing, and the two rows
+    actually being in the same place on the ground.
+    """
+    a = _UNIT_RE.sub("", address or "")
+    a = _display_address(a) or ""
+    a = a.split(",")[0]
+    a = re.sub(r"[^a-z0-9]+", " ", a.lower())
+    return re.sub(r"\s+", " ", a).strip()
+
+
+def canonical_address_key(
+    address: str | None, city: str | None = None, state: str | None = None
+) -> str:
+    """A comparison key for "is this the same street address?".
+
+    Deliberately not a new dependency. libpostal is the well-known answer and
+    genuinely the best of them, but it ships source-only — it means building a
+    C library and a ~2GB model on the deploy host. usaddress-scourgify is pure
+    Python and does good USPS Pub 28 normalisation, but it is US-only and
+    raises on messy scraped input.
+    
+    Measured against scourgify on real rows, this produces identical street
+    keys, because _display_address already does the same normalisation work
+    (NORTH -> N, Avenue -> Ave.) — and unlike scourgify it still yields a key
+    for a non-US address instead of throwing.
+
+    Punctuation is flattened so "US-1" and "US 1" agree. Not a display value;
+    never show this to anyone.
+    """
+    return (
+        f"{canonical_street_key(address)}|{_normalize_city(city)}"
+        f"|{(state or '').strip().upper()}"
+    )
+
+
 def _display_city(raw: str | None, address: str | None = None) -> str | None:
     """Turn a stored city value into something fit to show a person.
 

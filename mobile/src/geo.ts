@@ -9,7 +9,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getGeolocation } from './location';
+import { getGeolocation, getGeolocationIfPermitted } from './location';
 
 export type Coords = { lat: number; lng: number };
 
@@ -37,6 +37,24 @@ export async function getLastKnownGeo(): Promise<Coords | null> {
     /* fall through */
   }
   return null;
+}
+
+/**
+ * The best anchor available without ever prompting.
+ *
+ * Prefers a live fix when permission is already granted — someone who has
+ * allowed location should get results near where they actually are, even on
+ * their first search, without having had to run a near-me search first to
+ * seed the cache. Falls back to the remembered fix, then to nothing, and the
+ * server anchors on its own default from there.
+ */
+export async function getAnchorQuietly(): Promise<Coords | null> {
+  const live = await getGeolocationIfPermitted();
+  if (live) {
+    void rememberGeo(live);
+    return live;
+  }
+  return getLastKnownGeo();
 }
 
 /**

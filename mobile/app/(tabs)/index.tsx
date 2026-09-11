@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Linking,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +26,14 @@ import {
   NightsRow,
   SplitButton,
 } from '../../src/components';
+import {
+  Dialog,
+  Portal,
+  RadioButton,
+  TextInput as PaperTextInput,
+} from 'react-native-paper';
+import Animated from 'react-native-reanimated';
+import { cardEntering } from '../../src/motion';
 import { Colors, Radius, Spacing, TAP_HEIGHT, Typography } from '../../src/theme';
 
 /** What's currently narrowing the venue list. `all` is the default display. */
@@ -228,50 +234,44 @@ export default function VenuesScreen() {
           disabled={loading}
           trailingAccessibilityLabel={`Search radius: ${radiusMiles} miles. Tap to change.`}
         />
-        {radiusOpen && (
-          <Modal
-            transparent
-            visible={radiusOpen}
-            animationType="fade"
-            onRequestClose={() => setRadiusOpen(false)}
-          >
-            {/* Full-screen scrim; tap outside the card to dismiss. */}
-            <Pressable style={styles.modalScrim} onPress={() => setRadiusOpen(false)}>
-              <Pressable style={styles.modalCard} onPress={() => {}}>
-                <Text style={styles.modalTitle}>Show karaoke within</Text>
+        {/* Paper's Dialog brings the scrim, the Android back-button dismiss and
+            the a11y announcement the hand-rolled Modal never had. */}
+        <Portal>
+          <Dialog visible={radiusOpen} onDismiss={() => setRadiusOpen(false)}>
+            <Dialog.Title style={styles.dialogTitle}>Show karaoke within</Dialog.Title>
+            <Dialog.Content style={styles.dialogContent}>
+              <RadioButton.Group
+                value={String(radiusMiles)}
+                onValueChange={(v) => handleRadiusChange(Number(v))}
+              >
                 {RADIUS_OPTIONS.map((m) => (
-                  <Pressable
+                  <RadioButton.Item
                     key={m}
-                    onPress={() => handleRadiusChange(m)}
-                    style={({ pressed }) => [
-                      styles.modalRow,
-                      pressed && styles.whenChipPressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.modalRowText,
-                        m === radiusMiles && styles.modalRowTextActive,
-                      ]}
-                    >
-                      {m} miles
-                    </Text>
-                    {m === radiusMiles && <Text style={styles.modalCheck}>✓</Text>}
-                  </Pressable>
+                    label={`${m} miles`}
+                    value={String(m)}
+                    labelStyle={styles.dialogRowText}
+                    style={styles.dialogRow}
+                  />
                 ))}
-              </Pressable>
-            </Pressable>
-          </Modal>
-        )}
+              </RadioButton.Group>
+            </Dialog.Content>
+          </Dialog>
+        </Portal>
         <View style={styles.cityRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="or search by city…"
-            placeholderTextColor={Colors.textMute}
+          <PaperTextInput
+            mode="outlined"
+            label="Search by city"
             value={city}
             onChangeText={setCity}
             onSubmitEditing={handleCitySearch}
             returnKeyType="search"
+            autoCapitalize="words"
+            dense
+            style={styles.cityInput}
+            left={<PaperTextInput.Icon icon="magnify" />}
+            right={
+              city ? <PaperTextInput.Icon icon="close" onPress={handleReset} /> : undefined
+            }
           />
           <Button
             label="Go"
@@ -345,13 +345,17 @@ export default function VenuesScreen() {
           <Button label="← Back" onPress={handleReset} />
         </View>
       ) : (
-        visibleVenues.map((v) => (
-          <VenueCard
-            key={v.id}
-            venue={v}
-            onSelect={() => handleSelectVenue(v)}
-            stripeConfigured={config?.stripe_configured ?? false}
-          />
+        visibleVenues.map((v, i) => (
+          // The index drives the stagger, so results land as one wave instead
+          // of the whole list snapping in at once. Keyed by venue id so a
+          // re-search animates the new set rather than reusing positions.
+          <Animated.View key={v.id} entering={cardEntering(i)}>
+            <VenueCard
+              venue={v}
+              onSelect={() => handleSelectVenue(v)}
+              stripeConfigured={config?.stripe_configured ?? false}
+            />
+          </Animated.View>
         ))
       )}
     </ScrollView>
@@ -464,54 +468,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   content: { padding: Spacing.lg, paddingBottom: 100 },
   searchCard: { marginBottom: Spacing.md },
-  modalScrim: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.lg,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 320,
-    backgroundColor: Colors.bg2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-  },
-  modalTitle: {
-    fontSize: 13,
-    color: Colors.textDim,
-    marginBottom: 6,
-  },
-  modalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 48,
-    paddingHorizontal: 8,
-    borderRadius: Radius.sm,
-  },
-  modalRowText: { color: Colors.textDim, fontSize: 16, fontWeight: '600' },
-  modalRowTextActive: { color: Colors.text, fontWeight: '700' },
-  modalCheck: { color: Colors.pink, fontSize: 16, fontWeight: '700' },
   cityRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
     marginTop: Spacing.md,
+    alignItems: 'flex-start',
   },
-  input: {
+  cityInput: {
     flex: 1,
-    minHeight: TAP_HEIGHT,
     backgroundColor: Colors.bg2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 14,
-    color: Colors.text,
-    fontSize: 16,
   },
+  dialogTitle: { color: Colors.text, fontSize: 17, fontWeight: '700' },
+  dialogContent: { paddingHorizontal: 0, paddingBottom: 0 },
+  dialogRow: { paddingVertical: 2 },
+  dialogRowText: { color: Colors.text, fontSize: 16 },
   goBtn: {
     paddingHorizontal: 18,
   },

@@ -1,14 +1,44 @@
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Button as PaperButton,
+  Chip as PaperChip,
+  Dialog,
+  Portal,
+  Surface,
+} from 'react-native-paper';
 import { useState, type ReactNode } from 'react';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+import { PRESS_SCALE, SPRING } from './motion';
 import { formatTime12h } from './format';
 import { Colors, Radius, Shadows, Spacing, TAP_HEIGHT, Typography } from './theme';
 import { DAYS, dayAbbrev } from './days';
 import type { Song } from './types';
 import { DIFFICULTY_LABELS } from './types';
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 // ---------- Button ----------
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'cyan';
+
+/**
+ * Paper's Button behind this app's existing props, so no screen has to change.
+ *
+ * The variant names stay because they describe intent ("cyan" is the
+ * confirmation action, not merely a colour) and fifty-odd call sites already
+ * use them. Only the implementation moved.
+ */
+const BUTTON_MODE: Record<ButtonVariant, 'contained' | 'contained-tonal' | 'outlined'> = {
+  primary: 'contained',
+  secondary: 'contained-tonal',
+  ghost: 'outlined',
+  cyan: 'contained',
+};
 
 export function Button({
   label,
@@ -24,19 +54,21 @@ export function Button({
   style?: object;
 }) {
   return (
-    <Pressable
+    <PaperButton
+      mode={BUTTON_MODE[variant]}
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [
-        styles.btn,
-        styles[variant],
-        pressed && styles.btnPressed,
-        disabled && styles.btnDisabled,
-        style,
-      ]}
+      // Paper sizes buttons smaller than this app's 52pt target.
+      contentStyle={styles.btnContent}
+      labelStyle={styles.btnLabel}
+      style={[styles.btnShape, style]}
+      // Cyan is not a theme role, so it is passed explicitly rather than
+      // bent into `tertiary` — tertiary is used for text and chips elsewhere.
+      buttonColor={variant === 'cyan' ? Colors.cyan : undefined}
+      textColor={variant === 'cyan' ? '#10201d' : undefined}
     >
-      <Text style={styles.btnText}>{label}</Text>
-    </Pressable>
+      {label}
+    </PaperButton>
   );
 }
 
@@ -115,13 +147,25 @@ export function SplitButton({
 // ---------- Card ----------
 
 export function Card({ children, style }: { children: ReactNode; style?: object }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+  // elevation 2 maps to Colors.panel in paper-theme's pinned elevation table,
+  // which is the colour this card has always been.
+  return (
+    <Surface style={[styles.card, style]} elevation={2}>
+      {children}
+    </Surface>
+  );
 }
 
 // ---------- MetaPill ----------
 
 export function MetaPill({ label }: { label: string }) {
-  return <View style={styles.pill}><Text style={styles.pillText}>{label}</Text></View>;
+  // `compact` matters: a default Paper chip is noticeably taller than the pill
+  // this replaces, and these sit several-to-a-row on a venue card.
+  return (
+    <PaperChip compact style={styles.pill} textStyle={styles.pillText}>
+      {label}
+    </PaperChip>
+  );
 }
 
 // ---------- NightsRow ----------
@@ -135,7 +179,59 @@ export function MetaPill({ label }: { label: string }) {
  * a single row at a predictable width — the strip never reflows as venues
  * gain or lose nights, and an empty night reads as "not this one" instead of
  * simply being absent.
+ *
+ * Deliberately NOT Paper's SegmentedButtons, which is otherwise the right
+ * semantic fit (it supports multiSelect). Its segments carry `minWidth: 76`,
+ * so seven of them demand 532pt before any padding; a phone offers about 330
+ * to 400 inside a card. Overriding that minWidth would leave us maintaining a
+ * worse version of what is already here — seven flex:1 chips that always make
+ * one row and keep a 44pt target. The colours below come from theme.ts, which
+ * is the same source paper-theme.ts derives from, so this composes with Paper
+ * surfaces without a translation layer.
  */
+/**
+ * One night in the week strip.
+ *
+ * Split out of NightsRow purely so each chip can own a shared value — a hook
+ * cannot live inside a .map callback. The spring is deliberately small: this
+ * control gets tapped several times in a row while someone sets a schedule,
+ * and anything springier turns that into a bouncing mess.
+ */
+function DayChip({
+  day,
+  on,
+  onToggle,
+  interactive,
+}: {
+  day: string;
+  on: boolean;
+  onToggle?: (day: string) => void;
+  interactive: boolean;
+}) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <AnimatedPressable
+      onPress={onToggle ? () => onToggle(day) : undefined}
+      onPressIn={() => interactive && (scale.value = withSpring(PRESS_SCALE, SPRING))}
+      onPressOut={() => interactive && (scale.value = withSpring(1, SPRING))}
+      disabled={!interactive}
+      accessibilityRole={interactive ? 'checkbox' : undefined}
+      accessibilityState={interactive ? { checked: on } : undefined}
+      accessibilityLabel={day}
+      style={[
+        styles.dayChip,
+        interactive && styles.dayChipTappable,
+        on && styles.dayChipOn,
+        animatedStyle,
+      ]}
+    >
+      <Text style={[styles.dayChipText, on && styles.dayChipTextOn]}>{dayAbbrev(day)}</Text>
+    </AnimatedPressable>
+  );
+}
+
 export function NightsRow({
   nights,
   onToggle,
@@ -148,29 +244,15 @@ export function NightsRow({
   const interactive = !!onToggle;
   return (
     <View style={[styles.nightsRow, style]}>
-      {DAYS.map((day) => {
-        const on = nights.includes(day);
-        return (
-          <Pressable
-            key={day}
-            onPress={onToggle ? () => onToggle(day) : undefined}
-            disabled={!interactive}
-            accessibilityRole={interactive ? 'checkbox' : undefined}
-            accessibilityState={interactive ? { checked: on } : undefined}
-            accessibilityLabel={day}
-            style={({ pressed }) => [
-              styles.dayChip,
-              interactive && styles.dayChipTappable,
-              on && styles.dayChipOn,
-              pressed && interactive && styles.dayChipPressed,
-            ]}
-          >
-            <Text style={[styles.dayChipText, on && styles.dayChipTextOn]}>
-              {dayAbbrev(day)}
-            </Text>
-          </Pressable>
-        );
-      })}
+      {DAYS.map((day) => (
+        <DayChip
+          key={day}
+          day={day}
+          on={nights.includes(day)}
+          onToggle={onToggle}
+          interactive={interactive}
+        />
+      ))}
     </View>
   );
 }
@@ -231,21 +313,27 @@ export function TimeField({
         <Text style={styles.timeFieldCaret}>▾</Text>
       </Pressable>
 
-      <Modal
-        transparent
-        visible={open}
-        animationType="fade"
-        onRequestClose={() => setOpen(false)}
-      >
-        <Pressable style={styles.timeScrim} onPress={() => setOpen(false)}>
-          <Pressable style={styles.timeCard} onPress={() => {}}>
-            <Text style={styles.timeTitle}>{accessibilityLabel ?? 'Time'}</Text>
+      {/* Paper's Dialog, but our own list inside it.
+          react-native-paper-dates was the obvious alternative and is not worth
+          it here: it is another dependency, and its clock dial would discard
+          the one thing that makes this control good — the list starts at 4 PM
+          and wraps, so every realistic karaoke time is reachable without
+          scrolling. The Dialog shell still buys the scrim, the Android
+          back-button dismiss and the a11y announcement the raw Modal lacked. */}
+      <Portal>
+        <Dialog visible={open} onDismiss={() => setOpen(false)} style={styles.timeDialog}>
+          <Dialog.Title style={styles.timeTitle}>
+            {accessibilityLabel ?? 'Time'}
+          </Dialog.Title>
+          <Dialog.ScrollArea style={styles.timeScrollArea}>
             <ScrollView>
               {TIME_OPTIONS.map((t) => {
                 const active = t === value;
                 return (
                   <Pressable
                     key={t}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                     onPress={() => {
                       onChange(t);
                       setOpen(false);
@@ -260,14 +348,16 @@ export function TimeField({
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </Dialog.ScrollArea>
+        </Dialog>
+      </Portal>
     </>
   );
 }
 
 // ---------- Banner ----------
+
+const BANNER_ICON = { info: 'information-outline', warn: 'alert-outline', ok: 'check-circle-outline' } as const;
 
 export function Banner({
   message,
@@ -322,17 +412,18 @@ export function Chip({
   active?: boolean;
   onPress?: () => void;
 }) {
+  // Paper's `selected` carries the state, including the check affordance and
+  // the a11y role this used to be missing entirely as a bare Pressable.
   return (
-    <Pressable
+    <PaperChip
+      selected={!!active}
+      showSelectedCheck={false}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.chip,
-        active && styles.chipActive,
-        pressed && styles.chipPressed,
-      ]}
+      style={[styles.chip, active && styles.chipActive]}
+      textStyle={[styles.chipText, active && styles.chipTextActive]}
     >
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-    </Pressable>
+      {label}
+    </PaperChip>
   );
 }
 
@@ -412,12 +503,17 @@ export function SongCard({
 // ---------- Styles ----------
 
 const styles = StyleSheet.create({
-  btn: {
-    minHeight: TAP_HEIGHT,
+  btnShape: {
     borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  btnContent: {
+    minHeight: TAP_HEIGHT,
+    paddingHorizontal: Spacing.md,
+  },
+  btnLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0,
   },
   split: {
     flexDirection: 'row',
@@ -546,7 +642,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(196, 86, 141, 0.22)',
     borderColor: Colors.pink,
   },
-  dayChipPressed: { opacity: 0.85 },
   dayChipText: { color: Colors.textMute, fontSize: 13, fontWeight: '600' },
   dayChipTextOn: { color: Colors.text, fontWeight: '800' },
   timeField: {
@@ -562,30 +657,9 @@ const styles = StyleSheet.create({
   },
   timeFieldText: { color: Colors.text, fontSize: 16, fontWeight: '600' },
   timeFieldCaret: { color: Colors.textMute, fontSize: 12 },
-  timeScrim: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.lg,
-  },
-  timeCard: {
-    width: '100%',
-    maxWidth: 320,
-    maxHeight: '70%',
-    backgroundColor: Colors.panel,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingVertical: Spacing.sm,
-  },
-  timeTitle: {
-    color: Colors.textDim,
-    fontSize: 13,
-    fontWeight: '700',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-  },
+  timeDialog: { maxHeight: '75%' },
+  timeScrollArea: { paddingHorizontal: 0 },
+  timeTitle: { color: Colors.text, fontSize: 17, fontWeight: '700' },
   timeRow: {
     flexDirection: 'row',
     alignItems: 'center',

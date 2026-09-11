@@ -21,3 +21,28 @@ export async function getGeolocation(): Promise<{ lat: number; lng: number }> {
   });
   return { lat: pos.coords.latitude, lng: pos.coords.longitude };
 }
+
+/**
+ * Coordinates when we already have permission — never a prompt.
+ *
+ * The distinction matters: getGeolocation() asks, which is right when someone
+ * taps "Find karaoke near me" and wrong when they are halfway through typing a
+ * venue name. This returns null rather than prompting, so callers can quietly
+ * improve a result and quietly do without.
+ *
+ * getLastKnownPositionAsync is the OS's cached fix — instant, no GPS spin-up.
+ * Good enough for biasing a search toward the right part of the world.
+ */
+export async function getGeolocationIfPermitted(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const { granted } = await Location.getForegroundPermissionsAsync();
+    if (!granted) return null;
+    const pos =
+      (await Location.getLastKnownPositionAsync()) ??
+      (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }));
+    if (!pos) return null;
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  } catch {
+    return null;
+  }
+}
