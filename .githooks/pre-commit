@@ -1,0 +1,51 @@
+#!/bin/bash
+# pre-commit guard: keep machine artifacts and secrets out of history.
+#
+# The pre-push guard is the backstop that protects the shared repo. This one
+# runs earlier and matters more for secrets specifically: once a key is in a
+# commit it is in history, and deleting the file in a later commit does not
+# remove it. Blocking at commit time is the difference between "don't do that"
+# and "rewrite history".
+#
+# Checks only what is STAGED, which is also why it needs none of the
+# ref-range logic the pre-push hook carries.
+#
+# Activate per clone:   git config core.hooksPath .githooks
+# Bypass (emergencies): git commit --no-verify
+
+set -u
+
+# Kept identical to .githooks/pre-push on purpose — two guards that disagree
+# about what is dangerous are worse than one.
+PATTERN='(^|/)\.env$|(^|/)\.env\.[^/]+$|(^|/)[^/]*\.(db|sqlite|sqlite3)$|(^|/)\.?venv/|(^|/)node_modules/|(^|/)\.DS_Store$'
+TEMPLATE='\.(example|sample|template|dist)$'
+SECRETISH='(sk_live_|pk_live_|rk_live_|sk_test_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
+
+# Added/copied/modified/renamed only. A commit that DELETES a leaked file is
+# the cleanup we want, not something to refuse.
+staged=$(git diff --cached --name-only --diff-filter=ACMRT)
+[ -z "$staged" ] && exit 0
+
+hits=$(printf '%s\n' "$staged" | grep -E "$PATTERN" | grep -vE "$TEMPLATE" || true)
+
+# A template is allowed, unless someone pasted a real key into it.
+for tmpl in $(printf '%s\n' "$staged" | grep -E "$PATTERN" | grep -E "$TEMPLATE" || true); do
+    if git show ":$tmpl" 2>/dev/null | grep -qE "$SECRETISH"; then
+        hits=$(printf '%s\n%s' "$hits" "$tmpl (template contains what looks like a live key)")
+    fi
+done
+
+hits=$(printf '%s\n' "$hits" | grep -v '^$' || true)
+[ -z "$hits" ] && exit 0
+
+echo "" >&2
+echo "pre-commit: REFUSING — these staged paths look like machine artifacts or secrets:" >&2
+echo "$hits" >&2
+echo "" >&2
+echo "  unstage:  git restore --staged <path>" >&2
+echo "  ignore:   echo '<path>' >> .gitignore" >&2
+echo "" >&2
+echo "  Blocking here is deliberate: a secret that reaches a commit is in" >&2
+echo "  history even if you delete it afterwards." >&2
+echo "" >&2
+exit 1
